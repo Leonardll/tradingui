@@ -1,4 +1,19 @@
 import Image from 'next/image'
+import axios from 'axios'
+import { json } from 'stream/consumers';
+const fetchAccountInfo = async () => {
+  try {
+    const response = await axios.get('http://api/binance');
+    console.log(response.data);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+
+
+fetchAccountInfo();
+
 
 export default function Home() {
   return (
