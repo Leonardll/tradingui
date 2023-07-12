@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "pretty": "prettier --write \"./**/*.{js,jsx,ts,tsx,json}\"" 
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^2.5.0",
@@ -36,9 +37,12 @@
   },
   "browser": {
     "fs": false,
-    "path": false, 
-    "os": false, 
-    "net": false, 
+    "path": false,
+    "os": false,
+    "net": false,
     "tls": false
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0"
   }
 }
