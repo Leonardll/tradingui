@@ -6,6 +6,7 @@ import SelectField from "./selectField"
 import PercentageButton from "./percentageButton"
 import { getQuoteCurrency } from "@/app/utils/getQuoteCurrency"
 import apiService from "@/app/utils/apiService"
+import SubmitButton from "./submitButton"
 
 
 type Client = {
@@ -14,29 +15,9 @@ type Client = {
     getTime: boolean
 }
 
-type MyOrder = {
-    symbol: string
-    side: string
-    type: string
-    quantity?: string
-    quoteOrderQty?: string
-    price?: number
-    timeInForce?: string
-}
 
-interface WalletData {
-    makerCommission: number
-    takerCommission: number
-    buyerCommission: number
-    sellerCommission: number
-    canTrade: boolean
-    canWithdraw: boolean
-    canDeposit: boolean
-    updateTime: number
-    accountType: string
-    balances: Array<{ asset: string; free: string; locked: string }>
-    permissions: Array<string>
-}
+
+
 
 interface Balance {
     asset: string
@@ -341,15 +322,10 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
                     ))}
                 </div>
             </div>
-            <div className="flex flex-col justify-center ">
-                <button
-                    className=" p-2 bg-red-300 text-center"
-                    onClick={() => console.log(" button clicked")}
-                    type="submit"
-                >
-                    Place Order
-                </button>
-            </div>
+            
+            <SubmitButton onClick={() => console.log("Button clicked")}>
+                Place Order
+            </SubmitButton>
         </form>
     )
 }
