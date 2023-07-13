@@ -60,12 +60,25 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     const [quoteCurrencyBalance, setQuoteCurrencyBalance] = useState(0)
 
     const [baseCurrencyBalance, setBaseCurrencyBalance] = useState(0)
-
+    const [baseCurrency, setBaseCurrency] = useState<string | null>(null);
+    const [quoteCurrency, setQuoteCurrency] = useState<string | null>(null);
     const [takeProfitPrice, setTakeProfitPrice] = useState("")
     const [stopPrice, setStopPrice] = useState("")
     const [debouncedSymbol, setDebouncedSymbol] = useState("")
     const { data, error } = useWebSocket(debouncedSymbol)
-    const quoteCurrencies = ['USDT','BUSD', 'BTC', 'ETH', 'BNB'];
+
+
+
+    const getQuoteCurrency = (symbol: string) => {
+        const quoteCurrencies = ['USDT','BUSD', 'BTC', 'ETH', 'BNB'];
+        for (let quoteCurrency of quoteCurrencies) {
+            if (symbol.endsWith(quoteCurrency)) {
+                return quoteCurrency;
+            }
+        }
+        return null;
+    }
+
 
     // Price feed
     useEffect(() => {
@@ -137,31 +150,35 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
 
     // Set the base and quote currency balances
     useEffect(() => {
+        const quoteCurrencies = ['USDT','BUSD', 'BTC', 'ETH', 'BNB'];
+    
         if (symbol !== "") {
-          // get the base currency and quote currency from the symbol
-          const baseCurrency = quoteCurrencies.reduce((acc, quoteCurrency) => {
-            if (symbol.endsWith(quoteCurrency)) {
-              return symbol.slice(0, -quoteCurrency.length)
-            }
-            return acc
-          }, "")
+            const baseCurrency = quoteCurrencies.reduce((acc, quoteCurrency) => {
+                if (symbol.endsWith(quoteCurrency)) {
+                    return symbol.slice(0, -quoteCurrency.length)
+                }
+                return acc
+            }, "")
     
-          const quoteCurrency = getQuoteCurrency(symbol)
+            const quoteCurrency = getQuoteCurrency(symbol)
     
-          // find the balance of base and quote currency
-          const baseCurrencyBalanceObject = freeBalances.find((balance) => balance.asset === baseCurrency);
-          const quoteCurrencyBalanceObject = freeBalances.find((balance) => balance.asset === quoteCurrency);
-          
-          // extract the free balance
-          const baseCurrencyBalance = baseCurrencyBalanceObject ? parseFloat(baseCurrencyBalanceObject.free) : 0;
-          const quoteCurrencyBalance = quoteCurrencyBalanceObject ? parseFloat(quoteCurrencyBalanceObject.free) : 0;
-          
-          // set the balance states
-          setBaseCurrencyBalance(baseCurrencyBalance);
-          setQuoteCurrencyBalance(quoteCurrencyBalance);
+            const baseCurrencyBalanceObject = freeBalances.find((balance) => balance.asset === baseCurrency);
+            const quoteCurrencyBalanceObject = freeBalances.find((balance) => balance.asset === quoteCurrency);
+              
+            const baseCurrencyBalance = baseCurrencyBalanceObject ? parseFloat(baseCurrencyBalanceObject.free) : 0;
+            const quoteCurrencyBalance = quoteCurrencyBalanceObject ? parseFloat(quoteCurrencyBalanceObject.free) : 0;
+    
+            console.log('Symbol: ', symbol);
+            console.log('Base currency: ', baseCurrency);
+            console.log('Quote currency: ', quoteCurrency);
+            console.log('Free balances: ', freeBalances);
+            console.log('Base currency balance object: ', baseCurrencyBalanceObject);
+            console.log('Quote currency balance object: ', quoteCurrencyBalanceObject);
+    
+            setBaseCurrencyBalance(baseCurrencyBalance);
+            setQuoteCurrencyBalance(quoteCurrencyBalance);
         }
-      }, [symbol, freeBalances]);
-    
+    }, [symbol, freeBalances]);
     
 
     const handleOrderTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -233,24 +250,19 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
   
 
     const handleTotalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newPrice = e.target.value;
-        setPrice(newPrice);
+        const newTotal = e.target.value;
+        setTotalInBaseCurrency(parseFloat(newTotal));
     
-        // If Quantity is already filled in, calculate the total
-        if (quantity !== "") {
-            const total = parseFloat((parseFloat(newPrice) * parseFloat(quantity)).toFixed(2));
-            setTotalInBaseCurrency(total);
+        // If Price is already filled in, calculate the quantity
+        if (price !== "") {
+            const newQuantity = parseFloat(newTotal) / parseFloat(price);
+            setQuantity(newQuantity.toString());
         }
     };
+    
 
     
-    const baseCurrency = quoteCurrencies.reduce((acc, quoteCurrency) => {
-        if (symbol.endsWith(quoteCurrency)) {
-            return symbol.slice(0, -quoteCurrency.length)
-        }
-        return acc
-    }, "")
-    const quoteCurrency = getQuoteCurrency(symbol)
+    
     
 
 
