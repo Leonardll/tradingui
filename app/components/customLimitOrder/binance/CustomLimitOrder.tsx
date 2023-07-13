@@ -1,6 +1,12 @@
 "use client"
 import React, { use, useState, useEffect } from "react"
 import { useWebSocket } from "../../../hooks/useWebSocket"
+import InputField from "./inputField"
+import SelectField from "./selectField"
+import PercentageButton from "./percentageButton"
+import { getQuoteCurrency } from "@/app/utils/getQuoteCurrency"
+import apiService from "@/app/utils/apiService"
+
 
 type Client = {
     apiKey: string
@@ -12,9 +18,9 @@ type MyOrder = {
     symbol: string
     side: string
     type: string
-    quantity: number
+    quantity?: string
+    quoteOrderQty?: string
     price?: number
-    percentageOfBalance?: number
     timeInForce?: string
 }
 
@@ -42,8 +48,6 @@ interface CustomLimitOrderProps {
     freeBalances: Balance[]
 }
 
-
-
 const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     freeBalances,
 }: CustomLimitOrderProps) => {
@@ -60,25 +64,16 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     const [quoteCurrencyBalance, setQuoteCurrencyBalance] = useState(0)
 
     const [baseCurrencyBalance, setBaseCurrencyBalance] = useState(0)
-    const [baseCurrency, setBaseCurrency] = useState<string | null>(null);
-    const [quoteCurrency, setQuoteCurrency] = useState<string | null>(null);
+    const [baseCurrency, setBaseCurrency] = useState<string | null>(null)
+    const [quoteCurrency, setQuoteCurrency] = useState<string | null>(null)
     const [takeProfitPrice, setTakeProfitPrice] = useState("")
     const [stopPrice, setStopPrice] = useState("")
     const [debouncedSymbol, setDebouncedSymbol] = useState("")
     const { data, error } = useWebSocket(debouncedSymbol)
 
+    // Constants
 
-
-    const getQuoteCurrency = (symbol: string) => {
-        const quoteCurrencies = ['USDT','BUSD', 'BTC', 'ETH', 'BNB'];
-        for (let quoteCurrency of quoteCurrencies) {
-            if (symbol.endsWith(quoteCurrency)) {
-                return quoteCurrency;
-            }
-        }
-        return null;
-    }
-
+    const percentages = ["25", "50", "75", "100"]
 
     // Price feed
     useEffect(() => {
@@ -102,38 +97,38 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     }, [symbol])
 
     // OCO useEffect
-    useEffect(() => {
-        if (data) {
-            const parsedData = JSON.parse(data)
-            if (
-                parsedData.eventType === "executionReport" &&
-                parsedData.orderStatus === "FILLED"
-            ) {
-                console.log("Limit order filled, placing OCO order...")
+    // useEffect(() => {
+    //     if (data) {
+    //         const parsedData = JSON.parse(data)
+    //         if (
+    //             parsedData.eventType === "executionReport" &&
+    //             parsedData.orderStatus === "FILLED"
+    //         ) {
+    //             console.log("Limit order filled, placing OCO order...")
 
-                // The body for your OCO order
-                let ocoOrder: OCOOrder = {
-                    symbol: symbol,
-                    side: side,
-                    stopPrice: stopPrice === "" ? 0 : parseFloat(stopPrice),
-                    takeProfitPrice: takeProfitPrice === "" ? 0 : parseFloat(takeProfitPrice),
-                    quantity: quantity === "" ? 0 : parseFloat(quantity),
-                }
+    //             // The body for your OCO order
+    //             let ocoOrder: OCOOrder = {
+    //                 symbol: symbol,
+    //                 side: side,
+    //                 stopPrice: stopPrice === "" ? 0 : parseFloat(stopPrice),
+    //                 takeProfitPrice: takeProfitPrice === "" ? 0 : parseFloat(takeProfitPrice),
+    //                 quantity: quantity === "" ? 0 : parseFloat(quantity),
+    //             }
 
-                // The API request to place the OCO order
-                fetch("/api/binance/customOCOOrder", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(ocoOrder),
-                })
-                    .then((res) => res.json())
-                    .then((data) => console.log(data))
-                    .catch((err) => console.log(err))
-            }
-        }
-    }, [data])
+    //             // The API request to place the OCO order
+    //             fetch("/api/binance/customOCOOrder", {
+    //                 method: "POST",
+    //                 headers: {
+    //                     "Content-Type": "application/json",
+    //                 },
+    //                 body: JSON.stringify(ocoOrder),
+    //             })
+    //                 .then((res) => res.json())
+    //                 .then((data) => console.log(data))
+    //                 .catch((err) => console.log(err))
+    //         }
+    //     }
+    // }, [data])
 
     // Debounce the symbol input
     useEffect(() => {
@@ -150,7 +145,7 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
 
     // Set the base and quote currency balances
     useEffect(() => {
-        const quoteCurrencies = ['USDT','BUSD', 'BTC', 'ETH', 'BNB'];
+        const quoteCurrencies = ["USDT", "BUSD", "BTC", "ETH", "BNB"]
     
         if (symbol !== "") {
             const baseCurrency = quoteCurrencies.reduce((acc, quoteCurrency) => {
@@ -162,163 +157,162 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     
             const quoteCurrency = getQuoteCurrency(symbol)
     
-            const baseCurrencyBalanceObject = freeBalances.find((balance) => balance.asset === baseCurrency);
-            const quoteCurrencyBalanceObject = freeBalances.find((balance) => balance.asset === quoteCurrency);
-              
-            const baseCurrencyBalance = baseCurrencyBalanceObject ? parseFloat(baseCurrencyBalanceObject.free) : 0;
-            const quoteCurrencyBalance = quoteCurrencyBalanceObject ? parseFloat(quoteCurrencyBalanceObject.free) : 0;
+            const baseCurrencyBalanceObject = freeBalances.find(
+                (balance: any) => balance.asset === baseCurrency,
+            )
+            const quoteCurrencyBalanceObject = freeBalances.find(
+                (balance: any) => balance.asset === quoteCurrency,
+            )
     
-            console.log('Symbol: ', symbol);
-            console.log('Base currency: ', baseCurrency);
-            console.log('Quote currency: ', quoteCurrency);
-            console.log('Free balances: ', freeBalances);
-            console.log('Base currency balance object: ', baseCurrencyBalanceObject);
-            console.log('Quote currency balance object: ', quoteCurrencyBalanceObject);
+            const baseCurrencyBalance = baseCurrencyBalanceObject
+                ? parseFloat(baseCurrencyBalanceObject.free)
+                : 0
+            const quoteCurrencyBalance = quoteCurrencyBalanceObject
+                ? parseFloat(quoteCurrencyBalanceObject.free)
+                : 0
     
-            setBaseCurrencyBalance(baseCurrencyBalance);
-            setQuoteCurrencyBalance(quoteCurrencyBalance);
+            console.log("Symbol: ", symbol)
+            console.log("Base currency: ", baseCurrency)
+            console.log("Quote currency: ", quoteCurrency)
+            console.log("Free balances: ", freeBalances)
+            console.log("Base currency balance object: ", baseCurrencyBalanceObject)
+            console.log("Quote currency balance object: ", quoteCurrencyBalanceObject)
+    
+            setBaseCurrencyBalance(baseCurrencyBalance)
+            setQuoteCurrencyBalance(quoteCurrencyBalance)
+    
+            // Set baseCurrency and quoteCurrency in the state
+            setBaseCurrency(baseCurrency)
+            setQuoteCurrency(quoteCurrency)
         }
-    }, [symbol, freeBalances]);
+    }, [symbol, freeBalances])
     
-
-    const handleOrderTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newType = e.target.value
-        setType(newType)
+    const handleOrderTypeChange = (value: string) => {
+        setType(value)
 
         // If the new order type is "LIMIT", set timeInForce to "GTC", otherwise set it to null
-        if (newType === "LIMIT") {
-            setTimeInForce("GTC")
-        } else {
-            setTimeInForce(null)
-        }
-    }
-    const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newQuantity = e.target.value;
-        setQuantity(newQuantity);
-    
-        // If Price is already filled in, calculate the total
-        if (price !== "") {
-            const total = parseFloat((parseFloat(newQuantity) * parseFloat(price)).toFixed(2));
-            setTotalInBaseCurrency(total);
-        }
-    };
-    
-
-    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault()
-
-        let body: MyOrder = {
-            symbol: symbol,
-            side: side,
-            type: type,
-            quantity: quantity === "" ? 0 : parseFloat(quantity),
-        }
-
-        if (percentageOfBalance !== "") {
-            body.percentageOfBalance = parseFloat(percentageOfBalance)
-        }
-
-        if (type === "LIMIT") {
-            body.price = parseFloat(price)
-
-            if (timeInForce) {
-                body.timeInForce = timeInForce
-            }
-        }
-
-        console.log(`Sending request to server with body:`, body)
-
-        const response = fetch("/api/binance/customOrder", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
-        })
-            .then((res) => {
-                console.log("Response from server:", res)
-                return res.json()
-            })
-            .then((data) => {
-                console.log(data)
-                setSymbol(symbol)
-            })
-            .catch((err) => console.log(err))
-
-        return response
+       
+            setTimeInForce(value === "LIMIT" ? "GTC" : null)
+     
     }
   
-
-    const handleTotalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newTotal = e.target.value;
-        setTotalInBaseCurrency(parseFloat(newTotal));
+    const handleQuantityChange = (value: string) => {
+        const newQuantity = parseFloat(value);
+        const priceValue = parseFloat(price);
     
-        // If Price is already filled in, calculate the quantity
-        if (price !== "") {
-            const newQuantity = parseFloat(newTotal) / parseFloat(price);
-            setQuantity(newQuantity.toString());
-        }
+        const isEmptyOrNaN = value === "" || isNaN(newQuantity) || isNaN(priceValue);
+    
+        setQuantity(isEmptyOrNaN ? "" : value);
+        setTotalInBaseCurrency(isEmptyOrNaN ? "" : newQuantity * priceValue);
+    };
+
+   
+
+    const handleTotalChange = (value: string) => {
+        const newTotal = parseFloat(value);
+        const priceValue = parseFloat(price);
+    
+        const isEmptyOrNaN = value === "" || isNaN(newTotal) || isNaN(priceValue);
+    
+        setTotalInBaseCurrency(isEmptyOrNaN ? "" : newTotal);
+        setQuantity(isEmptyOrNaN ? "" : (newTotal / priceValue).toString());
     };
     
-
+    const createOrder = (type: string, side: string, symbol: string, quantity: string, price: string, totalInBaseCurrency: string, timeInForce: string | null) => {
+        const orderBase = { symbol, side, type };
+        let orderDetail;
     
+        if (type === "LIMIT") {
+            orderDetail = { quantity, price: Number(price), timeInForce: timeInForce || undefined };
+        } else if (side === "BUY") {
+            orderDetail = { quoteOrderQty: totalInBaseCurrency.toString() };
+        } else {
+            orderDetail = { quantity };
+        }
     
+        return { ...orderBase, ...orderDetail };
+    };
+    
+     
     
 
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
 
+     
+        const order = createOrder(type, side, symbol, quantity, price, totalInBaseCurrency.toString(), timeInForce)
+
+        try {
+            const response = await apiService.createOrder(order)
+            const data = await response.json()
+            console.log(data)
+        } catch (error) {
+            console.error(error)
+        }
+    }
+
+    const handlePercentageClick = (
+        event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+        percentage: string,
+    ) => {
+        event.preventDefault()
+
+        const percentageInDecimal = parseInt(percentage) / 100
+        setPercentageOfBalance(percentage)
+
+        if (side === "BUY") {
+            const totalInQuoteCurrency = quoteCurrencyBalance * percentageInDecimal
+            setTotalInBaseCurrency(totalInQuoteCurrency)
+            // Assuming currentPrice is the price of baseCurrency in terms of quoteCurrency
+            const amountInBaseCurrency = totalInQuoteCurrency / currentPrice
+            setQuantity(amountInBaseCurrency.toString())
+        } else {
+            const amountInBaseCurrency = baseCurrencyBalance * percentageInDecimal
+            setQuantity(amountInBaseCurrency.toString())
+            const totalInQuoteCurrency = amountInBaseCurrency * currentPrice
+            setTotalInBaseCurrency(totalInQuoteCurrency)
+        }
+    }
 
     return (
         <form onSubmit={handleSubmit}>
             <div className="grid grid-rows-auto">
-                {/* Symbol field */}
-                <input
-                    className="p-2"
-                    type="text"
-                    placeholder="Symbol"
-                    value={symbol}
-                    onChange={(e) => {
-                        setSymbol(e.target.value)
-                    }}
+                <InputField type="text" placeholder="Symbol" value={symbol} onChange={setSymbol} />
+
+                <SelectField
+                    value={side}
+                    options={[
+                        { label: "Buy", value: "BUY" },
+                        { label: "Sell", value: "SELL" },
+                    ]}
+                    onChange={(value: string) => setSide(value)}
                 />
-                {/* Option for Buy or Sell orders */}
-                <select
-                    className="p-2"
-                    name="side"
-                    defaultValue="BUY"
-                    onChange={(e) => setSide(e.target.value)}
-                >
-                    <option value="BUY">Buy</option>
-                    <option value="SELL">Sell</option>
-                </select>
-                {/* 'Option for Limit or Market  */}
-                <select
-                    className="p-2"
-                    name="type"
-                    defaultValue="LIMIT"
-                    onChange={handleOrderTypeChange}
-                >
-                    <option value="LIMIT">LIMIT</option>
-                    <option value="MARKET">MARKET</option>
-                </select>
-                {/* Order Price field */}
-                <input
-                    className="p-2"
+
+                <SelectField
+                    value={type}
+                    options={[
+                        { label: "Limit", value: "LIMIT" },
+                        { label: "Market", value: "MARKET" },
+                    ]}
+                    onChange={handleOrderTypeChange} // It should work now because handleOrderTypeChange accepts ChangeEvent<HTMLSelectElement>
+                />
+
+                <InputField
                     type="number"
                     placeholder="Price"
                     value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    onChange={setPrice} // It should work now because setPrice accepts string
                     disabled={type === "MARKET"}
                 />
 
-                <input
-                    className="p-2"
+                <InputField
                     type="number"
                     placeholder={`Amount of ${baseCurrency}`}
                     value={quantity}
                     onChange={handleQuantityChange}
                 />
-                <input
-                    className="p-2"
+
+                <InputField
                     type="number"
                     placeholder={`Total (${quoteCurrency})`}
                     value={totalInBaseCurrency !== "" ? totalInBaseCurrency.toString() : ""}
@@ -337,14 +331,15 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
                     )}
                 </div>
 
-                <input
-                    className="p-2"
-                    type="number"
-                    placeholder="Percentage of Balance"
-                    value={percentageOfBalance}
-                    onChange={(e) => setPercentageOfBalance(e.target.value)}
-                    disabled={type === "MARKET"}
-                />
+                <div className="grid grid-cols-4 gap-2">
+                    {percentages.map((percentage) => (
+                        <PercentageButton
+                            key={percentage}
+                            percentage={percentage}
+                            onClick={handlePercentageClick}
+                        />
+                    ))}
+                </div>
             </div>
             <div className="flex flex-col justify-center ">
                 <button

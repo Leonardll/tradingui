@@ -18,55 +18,63 @@ async function fetchWithTimeout(resource: string, options: object, timeout = 100
     return response
 }
 
+// Fetch the lot size and price filter
+async function getFilters(symbol: string) {
+    const response = await fetch("https://api.binance.com/api/v3/exchangeInfo")
+    const exchangeInfo = await response.json()
+    const symbolInfo = exchangeInfo.symbols.find((s:any) => s.symbol === symbol)
+
+    const lotSizeFilter = symbolInfo.filters.find((f:any) => f.filterType === "LOT_SIZE")
+    const priceFilter = symbolInfo.filters.find((f:any) => f.filterType === "PRICE_FILTER")
+
+    return { lotSizeFilter, priceFilter }
+}
+
+function roundToPrecision(num: number, precision: number) {
+    const factor = Math.pow(10, precision)
+    return Math.round(num * factor) / factor
+}
+
 export const POST = async (req: any) => {
     if (!apiSecret) {
         throw new Error("API secret is not defined!")
     }
 
-    const start = Date.now()
-    let timeRes = await fetch("https://api.binance.com/api/v3/time")
-    let timeData = await timeRes.json()
-    const end = Date.now()
-    const latency = end - start
+    // let timeRes = await fetch("https://api.binance.com/api/v3/time")
+    // let timeData = await timeRes.json()
 
     const body = await req.json()
 
-    if (
-        !body ||
-        !body.symbol ||
-        !body.side ||
-        !body.quantity ||
-        !body.price ||
-        !body.type ||
-        !body.icebergQty
-    ) {
+    if (!body || !body.symbol || !body.side || !body.quantity || !body.price || !body.type) {
         throw new Error("Invalid request body!")
     }
 
-    const { symbol, side, type, quantity, price, icebergQty, stopPrice } = body
-    // Create the base query string
-    let queryString = `symbol=${symbol}&side=${side}&type=${type}&quantity=${quantity}`
+    const { symbol, side, type, quantity, price } = body
+    const { lotSizeFilter, priceFilter } = await getFilters(symbol)
+
+    // calculate precision for quantity and price
+    const quantityPrecision =
+        parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0
+    const pricePrecision = parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0
+
+    // adjust quantity and price to the correct precision
+    let adjustedQuantity = roundToPrecision(parseFloat(quantity), quantityPrecision)
+    let adjustedPrice = roundToPrecision(parseFloat(price), pricePrecision)
+
+    // create the base query string
+    let queryString = `symbol=${symbol}&side=${side}&type=${type}&quantity=${adjustedQuantity}`
 
     // Add price if order is not MARKET type
     if (type !== "MARKET") {
-        queryString += `&price=${price}`
-    }
+        queryString += `&price=${adjustedPrice}`
 
-    // Add icebergQty if it's not undefined
-    if (icebergQty !== undefined) {
-        queryString += `&icebergQty=${icebergQty}`
-    }
-
-    // Add stopPrice if it's not undefined
-    if (stopPrice !== undefined) {
-        queryString += `&stopPrice=${stopPrice}`
+        // Logic to apply time in force only for limit orders
+        const timeInForce = body.timeInForce ? body.timeInForce : "GTC"
+        queryString += `&timeInForce=${timeInForce}`
     }
 
     // Logic to apply time in foroce only for limit orders
-    const timeInForce = type !== "MARKET" ? "GTC" : null
-    // if (icebergQty) {
-    //   queryString += `&icebergQty=${icebergQty}`;
-    // }
+
     // Create signature
     let timestamp = Date.now()
     const recvWindow = "50000"
@@ -107,8 +115,9 @@ export const POST = async (req: any) => {
             try {
                 const errordata = await res.json()
                 console.error("Error response from Binance API:", errordata)
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Failed to parse error response from Binance API:", e)
+                return NextResponse.json({ error: e.message })
             }
         }
     } catch (error: any) {
