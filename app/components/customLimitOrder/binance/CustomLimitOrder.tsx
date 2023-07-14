@@ -7,17 +7,7 @@ import PercentageButton from "./percentageButton"
 import { getQuoteCurrency } from "@/app/utils/getQuoteCurrency"
 import apiService from "@/app/utils/apiService"
 import SubmitButton from "./submitButton"
-
-
-type Client = {
-    apiKey: string
-    apiSecret: string
-    getTime: boolean
-}
-
-
-
-
+import OCOOrder from "./OCOOrder"
 
 interface Balance {
     asset: string
@@ -36,12 +26,12 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     const [symbol, setSymbol] = useState("")
     const [side, setSide] = useState("BUY")
     const [type, setType] = useState("LIMIT")
-    const [quantity, setQuantity] = useState("")
+    const [quantity, setQuantity] = useState<number>(0)
     const [price, setPrice] = useState("")
     const [currentPrice, setCurrentPrice] = useState(0)
     const [timeInForce, setTimeInForce] = useState<string | null>("GTC")
     const [percentageOfBalance, setPercentageOfBalance] = useState("")
-    const [totalInBaseCurrency, setTotalInBaseCurrency] = useState<number | "">("")
+    const [totalInBaseCurrency, setTotalInBaseCurrency] = useState<number>(0)
     const [quoteCurrencyBalance, setQuoteCurrencyBalance] = useState(0)
 
     const [baseCurrencyBalance, setBaseCurrencyBalance] = useState(0)
@@ -127,7 +117,7 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     // Set the base and quote currency balances
     useEffect(() => {
         const quoteCurrencies = ["USDT", "BUSD", "BTC", "ETH", "BNB"]
-    
+
         if (symbol !== "") {
             const baseCurrency = quoteCurrencies.reduce((acc, quoteCurrency) => {
                 if (symbol.endsWith(quoteCurrency)) {
@@ -135,93 +125,100 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
                 }
                 return acc
             }, "")
-    
+
             const quoteCurrency = getQuoteCurrency(symbol)
-    
+
             const baseCurrencyBalanceObject = freeBalances.find(
                 (balance: any) => balance.asset === baseCurrency,
             )
             const quoteCurrencyBalanceObject = freeBalances.find(
                 (balance: any) => balance.asset === quoteCurrency,
             )
-    
+
             const baseCurrencyBalance = baseCurrencyBalanceObject
                 ? parseFloat(baseCurrencyBalanceObject.free)
                 : 0
             const quoteCurrencyBalance = quoteCurrencyBalanceObject
                 ? parseFloat(quoteCurrencyBalanceObject.free)
                 : 0
-    
+
             console.log("Symbol: ", symbol)
             console.log("Base currency: ", baseCurrency)
             console.log("Quote currency: ", quoteCurrency)
             console.log("Free balances: ", freeBalances)
             console.log("Base currency balance object: ", baseCurrencyBalanceObject)
             console.log("Quote currency balance object: ", quoteCurrencyBalanceObject)
-    
+
             setBaseCurrencyBalance(baseCurrencyBalance)
             setQuoteCurrencyBalance(quoteCurrencyBalance)
-    
+
             // Set baseCurrency and quoteCurrency in the state
             setBaseCurrency(baseCurrency)
             setQuoteCurrency(quoteCurrency)
         }
     }, [symbol, freeBalances])
-    
+
     const handleOrderTypeChange = (value: string) => {
         setType(value)
 
         // If the new order type is "LIMIT", set timeInForce to "GTC", otherwise set it to null
-       
-            setTimeInForce(value === "LIMIT" ? "GTC" : null)
-     
-    }
-  
-    const handleQuantityChange = (value: string) => {
-        const newQuantity = parseFloat(value);
-        const priceValue = parseFloat(price);
-    
-        const isEmptyOrNaN = value === "" || isNaN(newQuantity) || isNaN(priceValue);
-    
-        setQuantity(isEmptyOrNaN ? "" : value);
-        setTotalInBaseCurrency(isEmptyOrNaN ? "" : newQuantity * priceValue);
-    };
 
-   
+        setTimeInForce(value === "LIMIT" ? "GTC" : null)
+    }
+    const handleQuantityChange = (value: string) => {
+        const newQuantity = parseFloat(value)
+        const priceValue = parseFloat(price)
+        const isEmptyOrNaN = value === "" || isNaN(newQuantity) || isNaN(priceValue)
+
+        setQuantity(isEmptyOrNaN ? 0 : newQuantity)
+        setTotalInBaseCurrency(isEmptyOrNaN ? 0 : newQuantity * priceValue)
+    }
 
     const handleTotalChange = (value: string) => {
-        const newTotal = parseFloat(value);
-        const priceValue = parseFloat(price);
-    
-        const isEmptyOrNaN = value === "" || isNaN(newTotal) || isNaN(priceValue);
-    
-        setTotalInBaseCurrency(isEmptyOrNaN ? "" : newTotal);
-        setQuantity(isEmptyOrNaN ? "" : (newTotal / priceValue).toString());
-    };
-    
-    const createOrder = (type: string, side: string, symbol: string, quantity: string, price: string, totalInBaseCurrency: string, timeInForce: string | null) => {
-        const orderBase = { symbol, side, type };
-        let orderDetail;
-    
+        const newTotal = parseFloat(value)
+        const priceValue = parseFloat(price)
+
+        const isEmptyOrNaN = value === "" || isNaN(newTotal) || isNaN(priceValue)
+
+        setTotalInBaseCurrency(isEmptyOrNaN ? 0 : newTotal)
+        setQuantity(isEmptyOrNaN ? 0 : newTotal / priceValue)
+    }
+
+    const createOrder = (
+        type: string,
+        side: string,
+        symbol: string,
+        quantity: string,
+        price: string,
+        totalInBaseCurrency: string,
+        timeInForce: string | null,
+    ) => {
+        const orderBase = { symbol, side, type }
+        let orderDetail
+
         if (type === "LIMIT") {
-            orderDetail = { quantity, price: Number(price), timeInForce: timeInForce || undefined };
+            orderDetail = { quantity, price: Number(price), timeInForce: timeInForce || undefined }
         } else if (side === "BUY") {
-            orderDetail = { quoteOrderQty: totalInBaseCurrency.toString() };
+            orderDetail = { quoteOrderQty: totalInBaseCurrency.toString() }
         } else {
-            orderDetail = { quantity };
+            orderDetail = { quantity }
         }
-    
-        return { ...orderBase, ...orderDetail };
-    };
-    
-     
-    
+
+        return { ...orderBase, ...orderDetail }
+    }
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
 
-     
-        const order = createOrder(type, side, symbol, quantity, price, totalInBaseCurrency.toString(), timeInForce)
+        const order = createOrder(
+            type,
+            side,
+            symbol,
+            quantity.toString(),
+            price,
+            totalInBaseCurrency.toString(),
+            timeInForce,
+        )
 
         try {
             const response = await apiService.createOrder(order)
@@ -246,10 +243,10 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
             setTotalInBaseCurrency(totalInQuoteCurrency)
             // Assuming currentPrice is the price of baseCurrency in terms of quoteCurrency
             const amountInBaseCurrency = totalInQuoteCurrency / currentPrice
-            setQuantity(amountInBaseCurrency.toString())
+            setQuantity(amountInBaseCurrency)
         } else {
             const amountInBaseCurrency = baseCurrencyBalance * percentageInDecimal
-            setQuantity(amountInBaseCurrency.toString())
+            setQuantity(amountInBaseCurrency)
             const totalInQuoteCurrency = amountInBaseCurrency * currentPrice
             setTotalInBaseCurrency(totalInQuoteCurrency)
         }
@@ -289,15 +286,15 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
                 <InputField
                     type="number"
                     placeholder={`Amount of ${baseCurrency}`}
-                    value={quantity}
-                    onChange={handleQuantityChange}
+                    value={quantity.toString()}
+                    onChange={(value: string) => handleQuantityChange(value)}
                 />
 
                 <InputField
                     type="number"
                     placeholder={`Total (${quoteCurrency})`}
-                    value={totalInBaseCurrency !== "" ? totalInBaseCurrency.toString() : ""}
-                    onChange={handleTotalChange}
+                    value={totalInBaseCurrency.toString()}
+                    onChange={(value: string) => handleTotalChange(value)}
                 />
 
                 <div className="flex bg-grey">
@@ -322,10 +319,22 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
                     ))}
                 </div>
             </div>
-            
-            <SubmitButton onClick={() => console.log("Button clicked")}>
-                Place Order
-            </SubmitButton>
+            <div className="grid grid-rows-auto">
+                <div className="div">
+                    <h3 className="flex flex-row justify-center">TP/SL</h3>
+                </div>
+                <div>
+                    <OCOOrder
+                        takeProfit={takeProfitPrice}
+                        stopLoss={stopPrice}
+                        entryPrice={currentPrice}
+                        quoteCurrencyAmount={totalInBaseCurrency}
+                        setTakeProfit={setTakeProfitPrice}
+                        setStopLoss={setStopPrice}
+                    />
+                </div>
+            </div>
+            <SubmitButton onClick={() => console.log("Button clicked")}>Place Order</SubmitButton>
         </form>
     )
 }
