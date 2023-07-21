@@ -1,7 +1,7 @@
 "use client"
 
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import InputField from "./inputField"
 
 interface OCOOrderProps {
@@ -9,9 +9,13 @@ interface OCOOrderProps {
     stopLoss: string
     entryPrice: number
     quoteCurrencyAmount: number
-    setTakeProfit: (value: string) => void
-    setStopLoss: (value: string) => void
+    setTakeProfit: (orderId:string ,value: string) => void
+    setStopLoss: (orderId:string,value: string) => void
+    orderId?: string
+    submitOCOOrder: (takeProfit: string, stopLoss: string) => void,
+
 }
+
 
 const OCOOrder: React.FC<OCOOrderProps> = ({
     takeProfit,
@@ -20,7 +24,18 @@ const OCOOrder: React.FC<OCOOrderProps> = ({
     quoteCurrencyAmount,
     setTakeProfit,
     setStopLoss,
+    orderId,
+    submitOCOOrder,
 }) => {
+
+    const [localTakeProfit, setLocalTakeProfit] = useState(takeProfit)
+    const [localStopLoss, setLocalStopLoss] = useState(stopLoss)
+    
+    useEffect(() => {
+      if (orderId) {
+        submitOCOOrder(localTakeProfit, localStopLoss)
+      }
+    }, [orderId])
     const calculateProfit = () => {
         const baseCurrencyAmount = quoteCurrencyAmount / entryPrice
         const tp = parseFloat(takeProfit)
@@ -56,13 +71,20 @@ const OCOOrder: React.FC<OCOOrderProps> = ({
                 type="text"
                 placeholder="Take Profit"
                 value={takeProfit}
-                onChange={(value: string) => setTakeProfit(value)}
+                onChange={(value: string) => {
+                    setLocalTakeProfit(value)
+                    orderId && setTakeProfit(orderId,value) 
+                }
+            }
             />
             <InputField
                 type="text"
                 placeholder="Stop Loss"
-                value={stopLoss}
-                onChange={(value: string) => setStopLoss(value)}
+                value={localStopLoss}
+                onChange={(value: string) => {
+                    setLocalStopLoss(value)
+                    orderId && setStopLoss(orderId,value) 
+                }}
             />
             <div className="p-2">
                 <p>Potential Profit: {calculateProfit()}</p>

@@ -1,142 +1,176 @@
-// export const runtime = 'nodejs'
-
-import { withApiAuthRequired, getSession } from "@auth0/nextjs-auth0"
-import { NextResponse } from "next/server"
-import { saveOrderData, updateOrderData } from "@/app/utils/orderService";
-import crypto from "crypto"
+import { withApiAuthRequired, getSession } from "@auth0/nextjs-auth0";
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { v4 as uuidv4 } from 'uuid';
-const apiKey = process.env.BINANCE_API_KEY
-const apiSecret = process.env.BINANCE_SECRET_KEY
 
-async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
-    const controller = new AbortController()
-    const id = setTimeout(() => controller.abort(), timeout)
+const apiKey = process.env.BINANCE_API_KEY;
+const apiSecret = process.env.BINANCE_SECRET_KEY;
+const testApiKey = process.env.BINANCE_TEST_API_KEY;
+const testApiSecret = process.env.BINANCE_TEST_SECRET_KEY;
 
-    const response = await fetch(resource, { ...options, signal: controller.signal })
-    clearTimeout(id)
+const binanceUrl = process.env.BINANCE_URL;
+const binanceTestUrl = process.env.BINANCE_TEST_URL;
 
-    return response
+type Data = {
+    name: string
 }
 
-// Fetch the lot size and price filter
+type OrderRequest = {
+    symbol: string;
+    side: string;
+    quantity: number;
+    price: number;
+    stopPrice: number;
+    stopLimitPrice: number;
+    timeInForce?: string;
+    newOrderRespType?: string;
+};
+
+async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch(resource, { ...options, signal: controller.signal });
+    clearTimeout(id);
+
+    return response;
+}
+
 async function getFilters(symbol: string) {
-    const response = await fetch("https://api.binance.com/api/v3/exchangeInfo")
-    const exchangeInfo = await response.json()
-    const symbolInfo = exchangeInfo.symbols.find((s:any) => s.symbol === symbol)
+    const response = await fetch(`${binanceTestUrl}/exchangeInfo`);
+    const exchangeInfo = await response.json();
+    const symbolInfo = exchangeInfo.symbols.find((s: any) => s.symbol === symbol);
 
-    const lotSizeFilter = symbolInfo.filters.find((f:any) => f.filterType === "LOT_SIZE")
-    const priceFilter = symbolInfo.filters.find((f:any) => f.filterType === "PRICE_FILTER")
+    const lotSizeFilter = symbolInfo.filters.find((f: any) => f.filterType === "LOT_SIZE");
+    const priceFilter = symbolInfo.filters.find((f: any) => f.filterType === "PRICE_FILTER");
 
-    return { lotSizeFilter, priceFilter }
+    return { lotSizeFilter, priceFilter };
 }
 
 function roundToPrecision(num: number, precision: number) {
-    const factor = Math.pow(10, precision)
-    return Math.round(num * factor) / factor
+    const factor = Math.pow(10, precision);
+    return Math.round(num * factor) / factor;
 }
 
+async function getAccessToken() {
+    const url = `https://dev-0nw5lm1dtkpxtx8q.us.auth0.com/oauth/token`;
+    const body = {
+        client_id: 'KMLDVVLgRUkHL4iS0oJAS7FJXMO0Oc64',
+        client_secret: 'qGDi-YaMFRKU3l8xwTQXxPKbSqZ4ojUZb2NPt6pXZMvkhuC46razJCmMOSxbSokR',
+        audience: 'https://dev-0nw5lm1dtkpxtx8q.us.auth0.com/api/v2/',
+        grant_type: 'client_credentials'
+    };
 
-export const POST = async (req: any) => {
-    if (!apiSecret) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+        return data.access_token;
+    } else {
+        throw new Error(data.error_description || 'Failed to get access token');
+    }
+}
+
+const POST = async (req:any, res ) => {
+    try {
+        const accessToken = await getAccessToken();
+
+        const session = await getSession(req, res);
+        if (!session || !session.user) {
+            return NextResponse.json({ name: 'Unauthorized' });
+        }
+
+        if (! testApiSecret) {
         throw new Error("API secret is not defined!")
     }
-    const body = await req.json()
 
-    if (!body || !body.symbol || !body.side || !body.quantity || !body.price || !body.stopPrice || !body.stopLimitPrice) {
-        throw new Error("Invalid request body!")
-    }
+        const body =  await req.json();
+        console.log("body before", body);
+        const { symbol, side, quantity, price, stopPrice, stopLimitPrice } = body;
+        if (!body || !symbol || !side || !quantity || !price || !stopPrice || !stopLimitPrice) {
+            throw new Error("Invalid request body!");
+        }
 
-    const { symbol, side, quantity, price, stopPrice, stopLimitPrice } = body
-    const { lotSizeFilter, priceFilter } = await getFilters(symbol)
+        const { lotSizeFilter, priceFilter } = await getFilters(symbol);
 
-    // calculate precision for quantity and price
-    const quantityPrecision =
-        parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0
-    const pricePrecision = parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0
+        // Calculate precision for quantity and price
+        const quantityPrecision = parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0;
+        const pricePrecision = parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0;
 
-    // adjust quantity and price to the correct precision
-    let adjustedQuantity = roundToPrecision(parseFloat(quantity), quantityPrecision)
-    let adjustedPrice = roundToPrecision(parseFloat(price), pricePrecision)
-    let adjustedStopPrice = roundToPrecision(parseFloat(stopPrice), pricePrecision)
-    let adjustedStopLimitPrice = roundToPrecision(parseFloat(stopLimitPrice), pricePrecision)
+        // Adjust quantity and price to the correct precision
+        let adjustedQuantity = roundToPrecision(parseFloat(quantity), quantityPrecision);
+        let adjustedPrice = roundToPrecision(parseFloat(price), pricePrecision);
+        let adjustedStopPrice = roundToPrecision(parseFloat(stopPrice), pricePrecision);
+        let adjustedStopLimitPrice = roundToPrecision(parseFloat(stopLimitPrice), pricePrecision);
 
-    // create the base query string
-    let queryString = `symbol=${symbol}&side=${side}&type=OCO&quantity=${adjustedQuantity}`
+        // Create the base query string
+        let queryString = `symbol=${symbol}&side=${side}&type=OCO&quantity=${adjustedQuantity}`;
+        queryString += `&price=${adjustedPrice}&stopPrice=${adjustedStopPrice}&stopLimitPrice=${adjustedStopLimitPrice}`;
 
-    queryString += `&price=${adjustedPrice}&stopPrice=${adjustedStopPrice}&stopLimitPrice=${adjustedStopLimitPrice}`
-    
+        // Create unique client order ids
+        const listClientOrderId = uuidv4();
+        const limitClientOrderId = uuidv4();
+        const stopClientOrderId = uuidv4();
 
-      // create unique client order ids
-      const listClientOrderId = uuidv4();
-      const limitClientOrderId = uuidv4();
-      const stopClientOrderId = uuidv4();
-  
-      // add them to the query string
-      queryString += `&listClientOrderId=${listClientOrderId}`;
-      queryString += `&limitClientOrderId=${limitClientOrderId}`;
-      queryString += `&stopClientOrderId=${stopClientOrderId}`;
-  
-      // handle newOrderRespType if provided
-      const newOrderRespType = body.newOrderRespType ? body.newOrderRespType : null;
-      if (newOrderRespType) {
-          if (['ACK', 'RESULT', 'FULL'].includes(newOrderRespType)) {
-              queryString += `&newOrderRespType=${newOrderRespType}`;
-          } else {
-              throw new Error("Invalid newOrderRespType. Valid values are 'ACK', 'RESULT', or 'FULL'");
-          }
-      }
-  
-    // Add timeInForce only for limit orders
-    const timeInForce = body.timeInForce ? body.timeInForce : "GTC"
-    queryString += `&timeInForce=${timeInForce}`
+        // Add them to the query string
+        queryString += `&listClientOrderId=${listClientOrderId}`;
+        queryString += `&limitClientOrderId=${limitClientOrderId}`;
+        queryString += `&stopClientOrderId=${stopClientOrderId}`;
 
-    // Create signature 
-    let timestamp = Date.now()
-    const recvWindow = "50000"
-    // Add timestamp and recvWindow
-    queryString += `&recvWindow=${recvWindow}&timestamp=${timestamp}`
-    const signature = crypto.createHmac("sha256", apiSecret).update(queryString).digest("hex")
+        // Handle newOrderRespType if provided
+        const newOrderRespType = body.newOrderRespType ? body.newOrderRespType : null;
+        if (newOrderRespType) {
+            if (['ACK', 'RESULT', 'FULL'].includes(newOrderRespType)) {
+                queryString += `&newOrderRespType=${newOrderRespType}`;
+            } else {
+                throw new Error("Invalid newOrderRespType. Valid values are 'ACK', 'RESULT', or 'FULL'");
+            }
+        }
 
-    // Fetch binane order api with signature
+        // Add timeInForce only for limit orders
+        const timeInForce = body.timeInForce ? body.timeInForce : "GTC";
+        queryString += `&timeInForce=${timeInForce}`;
 
-    try {
-        console.log(
-            `Sending request to Binance API with URL: https://api.binance.com/api/v3/order/oco/test?${queryString}&signature=${signature}`,
-        )
+        // Create signature 
+        let timestamp = Date.now();
+        const recvWindow = "50000";
+        // Add timestamp and recvWindow
+        queryString += `&recvWindow=${recvWindow}&timestamp=${timestamp}`;
+        const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
 
-        let res = await fetchWithTimeout(
-            `https://api.binance.com/api/v3/order/oco/test?${queryString}&signature=${signature}`,
+        // Fetch binane order api with signature
+        let response = await fetchWithTimeout(
+            `${binanceTestUrl}/order/oco?${queryString}&signature=${signature}`,
             {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-MBX-APIKEY": apiKey,
+                    "authorization": `Bearer ${accessToken}`,
+                    "X-MBX-APIKEY": testApiKey,
+                    
                 },
             },
             5000,
-        )
+        );
 
-        if (res.ok) {
-            const data = await res.json()
-            console.log("Response from Binance API:", data)
-
-        // Save order data
-        saveOrderData(listClientOrderId, {request: body, response: data});
-
-            return NextResponse.json({ data })
+        if (response.ok) {
+            const data = await response.json();
+            console.log(data);
+            return NextResponse.json(data);
         } else {
-            try {
-                const errordata = await res.json()
-                console.error("Error response from Binance API:", errordata)
-            } catch (e: any) {
-                console.error("Failed to parse error response from Binance API:", e)
-                return NextResponse.json({ error: e.message })
-            }
+            const errorData = await response.json();
+            console.log(errorData);
+            return NextResponse.json(errorData);
         }
     } catch (error: any) {
-        console.error(error)
-        return NextResponse.json({ error: error.message })
+        console.log(error);
+        return NextResponse.json({ name: error.message });
     }
 }
 
-export default withApiAuthRequired(POST)
+export default withApiAuthRequired(POST);

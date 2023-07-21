@@ -1,19 +1,24 @@
+//export const runtime ='edge';
 import { NextResponse } from "next/server"
 
-//export const runtime ='edge';
-
+const binanceUrl = process.env.BINANCE_URL
+const binanceTestUrl = process.env.BINANCE_TEST_URL
 export async function GET() {
     const start = Date.now()
-    let timeRes = await fetch("https://api.binance.com/api/v3/time")
+    let timeRes = await fetch(`${binanceUrl}/time`)
     let timeData = await timeRes.json()
     const end = Date.now()
     const latency = end - start
     const serverTime = timeData.serverTime
     const localTime = start + Math.round(latency / 2)
 
-    let res = await fetch("https://api.binance.com/api/v3/ticker/price")
-
+    let res = await fetch(`${binanceUrl}/ticker/price`)
     const data = await res.json()
 
     return NextResponse.json({ data, serverTime, localTime, latency })
 }
+
+
+
+
+

@@ -2,11 +2,23 @@
 
 import Image from "next/image"
 import { useEffect, useState } from "react"
+import { AuthUserProvider, useAuthUser } from "./hooks/useAuthUser";
+import {useUser}  from '@auth0/nextjs-auth0/client';
 import { Doughnut } from "react-chartjs-2"
 import { Chart, ArcElement, CategoryScale, LinearScale, Tooltip, Legend } from "chart.js"
 import { Context } from "chartjs-plugin-datalabels"
 import CustomLimitOrder from "./components/customLimitOrder/binance/CustomLimitOrder"
+import BTCPriceComponent from "./components/customLimitOrder/binance/BTCPriceComponent"
+import OrderTable from "./components/orderTable/OrderTable"
+import exp from "constants";
 Chart.register(ArcElement, CategoryScale, LinearScale, Tooltip, Legend)
+
+interface Balance {
+    asset: string
+    free: string
+    locked: string
+}
+
 const DoughnutChartComponent = ({ data, priceFeed }) => {
     // console.log(priceFeed);
     const busdValue = (asset) => {
@@ -174,20 +186,13 @@ const DoughnutChartComponent = ({ data, priceFeed }) => {
         </div>
     )
 }
-
-interface Balance {
-    asset: string
-    free: string
-    locked: string
-}
-
-export default function Home() {
+const  Home = () => {
+    const { user, error, isLoading} = useUser()
     const [data, setData] = useState<Object>([])
     const [priceFeed, setPriceFeed] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(null)
+    const [customError, setCustomError] = useState(null)
     const [walletData, setWalletData] = useState<Balance[]>([])
-
     // Binance wallet data
     useEffect(() => {
         fetch("/api/binance") // replace 'your-endpoint' with the correct path to your API endpoint
@@ -203,8 +208,9 @@ export default function Home() {
                 setWalletData(data.data.balances)
                 setLoading(false)
             })
-            .catch((error) => {
-                setError(error.toString())
+            .catch((e) => {
+                console.log(e,'An error occurred')
+                setCustomError(e.message)
                 setLoading(false)
             })
     }, [])
@@ -225,18 +231,27 @@ export default function Home() {
                 setLoading(false)
             })
             .catch((error) => {
-                setError(error.toString())
+                console.log(error, "An error occurred")
+                setCustomError(error.toString())
                 setLoading(false)
             })
     }, [])
 
-    if (loading) {
+    if (loading || isLoading) {
         return <div>Loading...</div>
     }
 
-    if (error) {
-        return <div>Error: {error}</div>
+    if (customError) {
+        console.log(customError)
+        return <div>Custom Error: {customError.message}</div>
     }
+    if (error) {
+        console.error('An error occurred:', error);
+        return <div>Error: {error.message}</div>
+    }
+
+    
+    
 
     const busdValue = (asset) => {
         const symbol = asset + "BUSD"
@@ -250,70 +265,88 @@ export default function Home() {
         return assetValue ? assetValue?.price : "not found"
     }
 
-    return (
-        <main className="flex min-h-screen flex-col items-center justify-between p-10">
-            <div className="flex flex-col justify-between">
-                <h1 className="text-xl text-center">Binance Account Summary</h1>
-            </div>
-            <div className="flex flex-col justify-center items-center">
-                <p className="text-lg">Account Type: {data?.data.accountType}</p>
-            </div>
-            <div className="grid grid-cols-2  grid-flow-col gap-3 place-items-center">
-                <table className="table-auto">
-                    <thead>
-                        <tr>
-                            <th className="px-4 py-2">Asset</th>
-                            <th className="px-4 py-2">Free</th>
-                            <th className="px-4 py-2">Locked</th>
-                            <th className="px-4 py-2">Total</th>
-                            <th className="px-4 py-2">BUSD</th>
-                            <th className="px-4 py-2">BTC</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data?.data?.balances.map((item, index) => {
-                            const busdresult = busdValue(item.asset) * item.locked
-                            const btcresult = btcValue(item.asset) * item.locked
-                            const total = parseFloat(item.free) + parseFloat(item.locked)
 
-                            return (
-                                item.locked &&
-                                item.free > 0 && (
-                                    <tr key={index}>
-                                        <td className="border px-4 py-2">{item.asset}</td>
-                                        <td className="border px-4 py-2">
-                                            {parseFloat(item.free).toFixed(5)}
-                                        </td>
-                                        <td className="border px-4 py-2">
-                                            {parseFloat(item.locked).toFixed(5)}
-                                        </td>
-                                        <td className="border px-4 py-2">{total.toFixed(5)}</td>
-                                        <td className="border px-4 py-2">
-                                            {busdresult?.toFixed(2)
-                                                ? busdresult?.toFixed(2)
-                                                : "na"}
-                                        </td>
-                                        <td className="border px-4 py-2">
-                                            {btcresult.toFixed(5)}
-                                        </td>
-                                    </tr>
-                                )
-                            )
-                        })}
-                    </tbody>
-                </table>
 
-                <div className="w-3/4 flex justify-center text-center">
-                    <DoughnutChartComponent data={data?.data?.balances} priceFeed={priceFeed} />
+        return (
+            <main className="flex min-h-screen flex-col items-center justify-between p-10">
+                {   
+                user ? <div>Welcome, {user.name}!</div>: <div>Please log in.</div>
+                }
+                {/* <div className="flex flex-col justify-between">
+                    <h1 className="text-xl text-center">Binance Account Summary</h1>
                 </div>
-            </div>
-            <div className="flex">
-                <h1>Custom Limit Order</h1>
-            </div>
-            <div className="flex">
-                <CustomLimitOrder freeBalances={walletData} />
-            </div>
-            {/* Render your data here */}
-        </main>
-    )
+                <div className="flex flex-col justify-center items-center">
+                    <p className="text-lg">Account Type: {data?.data.accountType}</p>
+                </div>
+                <div className="grid grid-cols-2  grid-flow-col gap-3 place-items-center">
+                    <table className="table-auto">
+                        <thead>
+                            <tr>
+                                <th className="px-4 py-2">Asset</th>
+                                <th className="px-4 py-2">Free</th>
+                                <th className="px-4 py-2">Locked</th>
+                                <th className="px-4 py-2">Total</th>
+                                <th className="px-4 py-2">BUSD</th>
+                                <th className="px-4 py-2">BTC</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data?.data?.balances.map((item, index) => {
+                                const busdresult = busdValue(item.asset) * item.locked
+                                const btcresult = btcValue(item.asset) * item.locked
+                                const total = parseFloat(item.free) + parseFloat(item.locked)
+    
+                                return (
+                                    item.locked &&
+                                    item.free > 0 && (
+                                        <tr key={index}>
+                                            <td className="border px-4 py-2">{item.asset}</td>
+                                            <td className="border px-4 py-2">
+                                                {parseFloat(item.free).toFixed(5)}
+                                            </td>
+                                            <td className="border px-4 py-2">
+                                                {parseFloat(item.locked).toFixed(5)}
+                                            </td>
+                                            <td className="border px-4 py-2">{total.toFixed(5)}</td>
+                                            <td className="border px-4 py-2">
+                                                {busdresult?.toFixed(2)
+                                                    ? busdresult?.toFixed(2)
+                                                    : "na"}
+                                            </td>
+                                            <td className="border px-4 py-2">
+                                                {btcresult.toFixed(5)}
+                                            </td>
+                                        </tr>
+                                    )
+                                )
+                            })}
+                        </tbody>
+                    </table>
+    
+                    <div className="w-3/4 flex justify-center text-center">
+                        <DoughnutChartComponent data={data?.data?.balances} priceFeed={priceFeed} />
+                    </div>
+                </div> */}
+                <div className="flex">
+                    <h1>Custom Limit Order</h1>
+                </div>
+                <div className="flex">
+                    <CustomLimitOrder freeBalances={walletData} />
+                </div>
+                <div>
+                    <BTCPriceComponent />
+                </div>
+                <div className="div">
+                    <h3>Orders</h3>
+                <OrderTable  />
+                </div>
+                {/* Render your data here */}
+            </main>
+            
+        )
+
+
 }
+
+
+export default Home

@@ -3,32 +3,13 @@ import { withApiAuthRequired } from "@auth0/nextjs-auth0"
 import { NextResponse } from "next/server"
 import crypto from "crypto"
 
-type ResponseData = {
-    message: string
-    error: string
-    response: string
-}
-
-type header = {
-    "Content-Type": string
-    "API-Key": string
-    "X-MBX-APIKEY": string
-}
-
-type timeout = {
-    url: string
-    options: string
-    timeout: number
-}
-
 const apiKey = process.env.BINANCE_API_KEY
 const apiSecret = process.env.BINANCE_SECRET_KEY
+const binanceUrl = process.env.BINANCE_URL
 
 const testApiKey = process.env.BINANCE_TEST_API_KEY
 const testApiSecret = process.env.BINANCE_TEST_API_SECRET_KEY
-const binanceUrl = process.env.BINANCE_URL
 const binanceTestUrl = process.env.BINANCE_TEST_URL
-
 
 async function fetchWithTimeout(resource, options, timeout = 1000) {
     const controller = new AbortController()
@@ -40,10 +21,16 @@ async function fetchWithTimeout(resource, options, timeout = 1000) {
     return response
 }
 
-export const GET = async () => {
+export const GET = async (req) => {
     if (!testApiSecret) {
         throw new Error("API secret is not defined!")
     }
+
+    // Extract symbol from request query
+   // const { symbol } = req.query;
+    const symbol = "BTCUSDT"
+
+
     // Fetch server time from Binance and calculate latency
     const start = Date.now()
     let timeRes = await fetch(`${binanceTestUrl}/time`)
@@ -56,12 +43,11 @@ export const GET = async () => {
     const localTime = start + Math.round(latency / 2)
     const timeOffset = serverTime - localTime
 
- 
-
     // Create signature
     let timestamp = Date.now()
     const recvWindow = "50000"
-    const queryString = `recvWindow=${recvWindow}&timestamp=${timestamp}`
+
+    const queryString = `symbol=${symbol}&recvWindow=${recvWindow}&timestamp=${timestamp}`
     const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex")
 
     console.log(timestamp)
@@ -69,7 +55,7 @@ export const GET = async () => {
     console.log(`timestamp=${queryString}`)
     console.log("and return:", signature)
     let res = await fetchWithTimeout(
-        `${binanceTestUrl}/account?${queryString}&signature=${signature}`,
+        `${binanceTestUrl}/allOrders?${queryString}&signature=${signature}`,
         {
             method: "GET",
             headers: {
