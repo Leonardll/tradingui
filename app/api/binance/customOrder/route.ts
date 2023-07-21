@@ -8,6 +8,12 @@ import crypto from "crypto"
 const apiKey = process.env.BINANCE_API_KEY
 const apiSecret = process.env.BINANCE_SECRET_KEY
 
+const testApiKey = process.env.BINANCE_TEST_API_KEY
+const testApiSecret = process.env.BINANCE_TEST_API_SECRET_KEY
+
+const binanceUrl = process.env.BINANCE_URL
+const binanceTestUrl = process.env.BINANCE_TEST_URL
+
 async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
     const controller = new AbortController()
     const id = setTimeout(() => controller.abort(), timeout)
@@ -20,7 +26,7 @@ async function fetchWithTimeout(resource: string, options: object, timeout = 100
 
 // Fetch the lot size and price filter
 async function getFilters(symbol: string) {
-    const response = await fetch("https://api.binance.com/api/v3/exchangeInfo")
+    const response = await fetch(`${binanceTestUrl}/exchangeInfo`)
     const exchangeInfo = await response.json()
     const symbolInfo = exchangeInfo.symbols.find((s:any) => s.symbol === symbol)
 
@@ -80,7 +86,7 @@ export const POST = async (req: any) => {
     const recvWindow = "50000"
     // Add timestamp and recvWindow
     queryString += `&recvWindow=${recvWindow}&timestamp=${timestamp}`
-    const signature = crypto.createHmac("sha256", apiSecret).update(queryString).digest("hex")
+    const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex")
 
     console.log(timestamp)
     console.log("hashing the string for custom order: ")
@@ -91,29 +97,30 @@ export const POST = async (req: any) => {
 
     try {
         console.log(
-            `Sending request to Binance API with URL: https://api.binance.com/api/v3/order/test?${queryString}&signature=${signature}`,
+            `Sending request to Binance API with URL: ${binanceTestUrl}/order?${queryString}&signature=${signature}`,
         )
 
-        let res = await fetchWithTimeout(
-            `https://api.binance.com/api/v3/order/test?${queryString}&signature=${signature}`,
+        let response = await fetchWithTimeout(
+            `${binanceTestUrl}/order?${queryString}&signature=${signature}`,
             {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-MBX-APIKEY": apiKey,
+                    "X-MBX-APIKEY": testApiKey,
                 },
+             
             },
             5000,
         )
 
-        if (res.ok) {
-            const data = await res.json()
+        if (response.ok) {
+            const data = await response.json()
             console.log("Response from Binance API:", data)
             console.log("body data", body)
             return NextResponse.json({ data })
         } else {
             try {
-                const errordata = await res.json()
+                const errordata = await response.json()
                 console.error("Error response from Binance API:", errordata)
             } catch (e: any) {
                 console.error("Failed to parse error response from Binance API:", e)
