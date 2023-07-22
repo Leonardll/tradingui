@@ -10,8 +10,9 @@ type ImageProps = {
 const TickerLogo: React.FC<ImageProps> = ({ imageUrl1, imageUrl2 }) => {
   return (
     <div className="flex justify-center space-x-1 p-2">
+     { imageUrl1 &&
       <Image 
-        src={imageUrl1 && imageUrl1} 
+        src={ imageUrl1} 
         width={30}
         height={30}
         alt="logo1" 
@@ -19,16 +20,18 @@ const TickerLogo: React.FC<ImageProps> = ({ imageUrl1, imageUrl2 }) => {
         priority={true}
         loading='eager'
 
-      />
-      <Image 
-        src={imageUrl2 && imageUrl2} 
+      />}
+
+      { imageUrl2 &&
+        <Image 
+        src={ imageUrl2} 
         width={30}
         height={30}
         alt="logo2" 
         className="absolute rounded-full w-8 h-8 z-10 -ml-2" 
         priority={true}
         loading='eager'
-      />
+      />}
     </div>
   );
 }
