@@ -12,6 +12,8 @@
   "dependencies": {
     "@auth0/nextjs-auth0": "^3.0.0-beta.3",
     "@binance/connector": "^3.0.0-rc.2",
+    "@total-typescript/ts-reset": "^0.4.2",
+    "@types/lru-cache": "^7.10.10",
     "@types/node": "20.1.2",
     "@types/react": "18.2.6",
     "@types/react-dom": "18.2.4",
@@ -26,6 +28,8 @@
     "encoding": "^0.1.13",
     "eslint": "8.40.0",
     "eslint-config-next": "13.4.1",
+    "express-rate-limit": "^6.8.0",
+    "micro": "^10.0.1",
     "next": "13.4.1",
     "postcss": "8.4.23",
     "react": "18.2.0",

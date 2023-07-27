@@ -1,9 +1,10 @@
-// // export const dynamicParams = true;
 // export const runtime = 'nodejs'
+
 
 import { withApiAuthRequired, getSession } from "@auth0/nextjs-auth0"
 import { NextResponse } from "next/server"
 import crypto from "crypto"
+
 
 const apiKey = process.env.BINANCE_API_KEY
 const apiSecret = process.env.BINANCE_SECRET_KEY
@@ -17,6 +18,7 @@ const authUrl = process.env.AUTH0_ISSUER_BASE_URL
 const authClientId = process.env.AUTH0_CLIENT_ID
 const authClientSecret = process.env.AUTH0_CLIENT_SECRET
 const authAudience = process.env.AUTH_AUDIENCE
+
 async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
     const controller = new AbortController()
     const id = setTimeout(() => controller.abort(), timeout)
@@ -27,22 +29,9 @@ async function fetchWithTimeout(resource: string, options: object, timeout = 100
     return response
 }
 
-// Fetch the lot size and price filter
-async function getFilters(symbol: string) {
-    const response = await fetch(`${binanceTestUrl}/exchangeInfo`)
-    const exchangeInfo = await response.json()
-    const symbolInfo = exchangeInfo.symbols.find((s:any) => s.symbol === symbol)
 
-    const lotSizeFilter = symbolInfo.filters.find((f:any) => f.filterType === "LOT_SIZE")
-    const priceFilter = symbolInfo.filters.find((f:any) => f.filterType === "PRICE_FILTER")
 
-    return { lotSizeFilter, priceFilter }
-}
 
-function roundToPrecision(num: number, precision: number) {
-    const factor = Math.pow(10, precision)
-    return Math.round(num * factor) / factor
-}
 
 async function getAccessToken() {
     const url = `${authUrl}/oauth/token`;
@@ -52,6 +41,7 @@ async function getAccessToken() {
         audience: `${authAudience}`,
         grant_type: 'client_credentials'
     };
+    
     console.log('Getting access token from Auth0...');
 
     const res = await fetch(url, {
@@ -59,10 +49,10 @@ async function getAccessToken() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
     });
-    console.log('Response status:', res.status);
+   
 
     const data = await res.json();
-    console.log('Response data:', data);
+    //console.log('Response data:', data);
 
 
     if (res.ok) {
@@ -76,7 +66,8 @@ async function getAccessToken() {
     }
 }
 
-export const POST = async (req: any, res:any) => {
+
+export  const DELETE = async (req: any, res:any) => {
     try {
         console.log("getting access token")
         const accessToken = await getAccessToken();
@@ -93,38 +84,29 @@ export const POST = async (req: any, res:any) => {
             throw new Error("API secret is not defined!")
         }
     
-        // let timeRes = await fetch("https://api.binance.com/api/v3/time")
-        // let timeData = await timeRes.json()
+     
+        const { searchParams} = new URL(req.url)
+        console.log("search params", searchParams)
+        let body 
+        try {
+            body = await req.json();
+            console.log("body",  NextResponse.json({ body: body }, { status: 200 }))
+        } catch (error) {
+            console.error('Error parsing request body:', error);
+            return NextResponse.json({ error: 'Invalid request body' }, { status: 400});
+        }
     
-        const body = await req.json()
-    
-        if (!body || !body.symbol || !body.side || !body.quantity || !body.price || !body.type) {
+        if (!body || !body.symbol || !body.orderId  ) {
             throw new Error("Invalid request body!")
         }
     
-        const { symbol, side, type, quantity, price } = body
-        const { lotSizeFilter, priceFilter } = await getFilters(symbol)
+        const { symbol, orderId} = body
     
-        // calculate precision for quantity and price
-        const quantityPrecision =
-            parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0
-        const pricePrecision = parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0
-    
-        // adjust quantity and price to the correct precision
-        let adjustedQuantity = roundToPrecision(parseFloat(quantity), quantityPrecision)
-        let adjustedPrice = roundToPrecision(parseFloat(price), pricePrecision)
     
         // create the base query string
-        let queryString = `symbol=${symbol}&side=${side}&type=${type}&quantity=${adjustedQuantity}`
+        let queryString = `symbol=${symbol}&orderId=${orderId}`
     
-        // Add price if order is not MARKET type
-        if (type !== "MARKET") {
-            queryString += `&price=${adjustedPrice}`
-    
-            // Logic to apply time in force only for limit orders
-            const timeInForce = body.timeInForce ? body.timeInForce : "GTC"
-            queryString += `&timeInForce=${timeInForce}`
-        }
+       
     
         // Logic to apply time in foroce only for limit orders
     
@@ -150,7 +132,7 @@ export const POST = async (req: any, res:any) => {
             let response = await fetchWithTimeout(
                 `${binanceTestUrl}/order?${queryString}&signature=${signature}`,
                 {
-                    method: "POST",
+                    method: "DELETE",
                     headers: {
                         "Content-Type": "application/json",
                         "authorization": `Bearer ${accessToken}`,
@@ -185,6 +167,4 @@ export const POST = async (req: any, res:any) => {
     }
 }
 
- 
-
-export default withApiAuthRequired(POST)
+export default withApiAuthRequired(DELETE)
