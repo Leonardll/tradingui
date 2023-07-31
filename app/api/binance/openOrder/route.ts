@@ -16,14 +16,16 @@ const binanceTestUrl = process.env.BINANCE_TEST_URL
 
 let exchangeInfo = null;
 
-interface ExchangeInfo {
-    symbols: { symbol: string }[];
+interface SymbolInfo {
+    symbol: string;
     // include other properties as needed
-  }
-  
-  interface TimeData {
+}
+
+type ExchangeInfo = SymbolInfo[];
+
+interface TimeData {
     serverTime: number;
-  }
+}
   
 
   
@@ -37,45 +39,30 @@ async function fetchWithTimeout(resource:any, options:any, timeout = 5000) {
     return response
 }
 
-async function getOrdersForSymbol(symbol:any) {
-    if (!testApiSecret) {
-        throw new Error("API secret is not defined!");
+
+async function getOrdersForSymbol(symbol: any) {
+    try {
+      // Define the URL of your Express app server route for orders
+      const url = `http://localhost:4000/allOrders?symbol=${symbol}`;
+  
+      // Make a GET request to your server route
+      const res = await fetch(url);
+  
+      // Check if the request was successful
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+  
+      // Parse the response data as JSON
+      const data = await res.json();
+  
+      return data;
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      return null;
     }
-
-    // Fetch server time from Binance and calculate latency
-    const start = Date.now();
-    let timeRes = await fetch(`${binanceTestUrl}/time`);
-    let timeData = await timeRes.json() as TimeData;
-    const end = Date.now();
-    const latency = end - start;
-
-    // Calculate the offset between your system time and Binance's server time
-    const serverTime = timeData.serverTime;
-    const localTime = start + Math.round(latency / 2);
-    const timeOffset = serverTime - localTime;
-
-    // Create signature
-    let timestamp = Date.now();
-    const recvWindow = "50000";
-
-    const queryString = `symbol=${symbol}&recvWindow=${recvWindow}&timestamp=${timestamp}`;
-    const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
-
-    let res = await fetchWithTimeout(
-        `${binanceTestUrl}/allOrders?${queryString}&signature=${signature}`,
-        {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                "X-MBX-APIKEY": testApiKey,
-            },
-        },
-        5000,
-    );
-    const data = await res.json();
-
-    return data;
-}
+  }
+  
 
 export const GET = async (req:unknown, res:unknown) => {
     if (!testApiSecret) {
@@ -90,14 +77,14 @@ export const GET = async (req:unknown, res:unknown) => {
            
 
             const response = await fetch(`http://localhost:4000/exchangeInfo`);
-
             if (!response.ok) {
               throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json() as ExchangeInfo;
-            const symbols:any = data?.symbols.map(symbolInfo => symbolInfo.symbol);
-
+          //  console.log('Data from /exchangeInfo endpoint:', data[0]); // Add this line
+            const symbols:any = data?.map(symbolInfo => symbolInfo.symbol);
+            // console.log('symbols', symbols) 
             return symbols;
         } catch (error:any) {
             if (error.message.includes('429')) {

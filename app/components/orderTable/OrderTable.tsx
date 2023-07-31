@@ -48,13 +48,12 @@ const OrderTable: React.FC = () => {
             try {
 
                 const response = await fetch("/api/binance/openOrder")
-                
+                console.log("response from ordertable fetch", response)
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                   }
                 // ensure the correct endpoint
                 const data = await response.json() as OrdersResponse
-                console.log(data)
     
                 setOrders(data.allOrders)
             } catch (error) {
@@ -65,9 +64,11 @@ const OrderTable: React.FC = () => {
         fetchOrders()
     }, []) // only run once on component mount
     useEffect(() => {
-        console.log(orders);
+         console.log(orders);
     }, [orders]);
     
+
+    // Fetch ticker data from CryptoCompare
     useEffect(() => {
         const fetchTickerData = async () => {
             const response = await fetch(`/api/ccompare`)
@@ -76,7 +77,7 @@ const OrderTable: React.FC = () => {
                 return;
               }
             const data = await response.json() as CCompareResponse
-            console.log(data.data)
+            // console.log(data.data)
             let tickerData: {[key: string]: string} = {}
             for (let i in data.data) {
                 let symbol = data.data[i]?.Symbol;
@@ -87,7 +88,7 @@ const OrderTable: React.FC = () => {
                   }
             }
             setTickerData(tickerData)
-            console.log("tickerData",tickerData)
+            // console.log("tickerData",tickerData)
         }
         fetchTickerData()
     }, [])
@@ -108,15 +109,12 @@ const OrderTable: React.FC = () => {
         return [baseSymbol, quoteSymbol]
     }
 
-    // Create a WebSocket connection
- // Create a WebSocket connection
-// const connectWebSocket = () => {
-//     const socket = new WebSocketClient("ws://localhost:4000")
-//     socket.connect()
-//     setWs(socket)
-//     console.log('Attempting to connect WebSocket...') // Log for connection attempt
-// }
 
+
+
+
+
+// Cancel order
 useEffect(() => {
     if (ws) {
         ws.onMessage((response) => {
@@ -169,9 +167,9 @@ async function cancelOrderClient  (order: Order) {
        orders && orders.length > 0 &&
             orders.map((order) => {
                 const [baseSymbol, quoteSymbol] = extractBaseSymbol(order.symbol)
-                console.log("baseSymbol", baseSymbol);
-console.log("quoteSymbol", quoteSymbol);
-console.log("tickerData", tickerData);
+                // console.log("baseSymbol", baseSymbol);
+// console.log("quoteSymbol", quoteSymbol);
+// console.log("tickerData", tickerData);
                 const imageUrl1 =
                 tickerData && baseSymbol !== undefined && tickerData[baseSymbol]
                 ? `${cryptoCompareBaseUrl}${tickerData[baseSymbol]}`
