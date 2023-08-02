@@ -1,9 +1,11 @@
 // // export const dynamicParams = true;
-// export const runtime = 'nodejs'
+ export const runtime = 'edge'
 
 import { withApiAuthRequired, getSession } from "@auth0/nextjs-auth0"
 import { NextResponse } from "next/server"
 import crypto from "crypto"
+import dbConnect from "@/app/ libs/mongodb"
+import Order from "@/app/models/order"
 
 const apiKey = process.env.BINANCE_API_KEY
 const apiSecret = process.env.BINANCE_SECRET_KEY
@@ -17,6 +19,39 @@ const authUrl = process.env.AUTH0_ISSUER_BASE_URL
 const authClientId = process.env.AUTH0_CLIENT_ID
 const authClientSecret = process.env.AUTH0_CLIENT_SECRET
 const authAudience = process.env.AUTH_AUDIENCE
+
+
+interface ExchangeInfo {
+    symbols: SymbolInfo[];
+  }
+  
+  interface SymbolInfo {
+    symbol: string;
+    filters: Filter[];
+  }
+  
+  interface Filter {
+    filterType: string;
+    stepSize?: string;
+    tickSize?: string;
+    // Add other properties as needed
+  }
+  
+  interface BinanceResponse {
+    // Define the fields you expect in the response here
+    // Example:
+    symbol: string;
+    orderId: number;
+    // Add other fields as needed
+  }
+
+  interface Auth0Response {
+    access_token: string;
+    error_description?: string;
+    // Add other fields as needed
+  }
+  
+  
 async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
     const controller = new AbortController()
     const id = setTimeout(() => controller.abort(), timeout)
@@ -28,16 +63,21 @@ async function fetchWithTimeout(resource: string, options: object, timeout = 100
 }
 
 // Fetch the lot size and price filter
-async function getFilters(symbol: string) {
-    const response = await fetch(`${binanceTestUrl}/exchangeInfo`)
-    const exchangeInfo = await response.json()
-    const symbolInfo = exchangeInfo.symbols.find((s:any) => s.symbol === symbol)
-
-    const lotSizeFilter = symbolInfo.filters.find((f:any) => f.filterType === "LOT_SIZE")
-    const priceFilter = symbolInfo.filters.find((f:any) => f.filterType === "PRICE_FILTER")
-
-    return { lotSizeFilter, priceFilter }
-}
+async function getFilters(symbol: string): Promise<{ lotSizeFilter: Filter; priceFilter: Filter }> {
+    const response = await fetch(`${binanceTestUrl}/exchangeInfo`);
+    const exchangeInfo = await response.json() as ExchangeInfo;
+    const symbolInfo = exchangeInfo.symbols.find((s: any) => s.symbol === symbol);
+  
+    const lotSizeFilter = symbolInfo?.filters.find((f: Filter) => f.filterType === "LOT_SIZE");
+    const priceFilter = symbolInfo?.filters.find((f: Filter) => f.filterType === "PRICE_FILTER");
+  
+    if (!lotSizeFilter || !priceFilter) {
+      throw new Error("Filters not found for the given symbol");
+    }
+  
+    return { lotSizeFilter, priceFilter };
+  }
+  
 
 function roundToPrecision(num: number, precision: number) {
     const factor = Math.pow(10, precision)
@@ -61,7 +101,7 @@ async function getAccessToken() {
     });
     console.log('Response status:', res.status);
 
-    const data = await res.json();
+    const data = await res.json()  as Auth0Response;
     console.log('Response data:', data);
 
 
@@ -76,7 +116,7 @@ async function getAccessToken() {
     }
 }
 
-export const POST = async (req: any, res:any) => {
+ const POST = withApiAuthRequired( async (req: any, res:any) => {
     try {
         console.log("getting access token")
         const accessToken = await getAccessToken();
@@ -92,6 +132,8 @@ export const POST = async (req: any, res:any) => {
         if (!testApiSecret) {
             throw new Error("API secret is not defined!")
         }
+
+        
     
         // let timeRes = await fetch("https://api.binance.com/api/v3/time")
         // let timeData = await timeRes.json()
@@ -104,11 +146,11 @@ export const POST = async (req: any, res:any) => {
     
         const { symbol, side, type, quantity, price } = body
         const { lotSizeFilter, priceFilter } = await getFilters(symbol)
+       
     
         // calculate precision for quantity and price
-        const quantityPrecision =
-            parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0
-        const pricePrecision = parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0
+        const quantityPrecision = lotSizeFilter.stepSize ? parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0 : 0;
+        const pricePrecision = priceFilter.tickSize ? parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0 : 0;
     
         // adjust quantity and price to the correct precision
         let adjustedQuantity = roundToPrecision(parseFloat(quantity), quantityPrecision)
@@ -162,9 +204,12 @@ export const POST = async (req: any, res:any) => {
             )
     
             if (response.ok) {
-                const data = await response.json()
+                const data = await response.json() as BinanceResponse
                 console.log("Response from Binance API:", data)
                 console.log("body data", body)
+                await dbConnect();
+                const order = new Order(data);
+                await order.save();
                 return NextResponse.json({ data }, { status: 200 })
             } else {
                 try {
@@ -183,8 +228,9 @@ export const POST = async (req: any, res:any) => {
         console.error(error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
-}
+})
 
  
 
-export default withApiAuthRequired(POST)
+export {POST}
+

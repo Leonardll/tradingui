@@ -19,6 +19,13 @@ const authClientId = process.env.AUTH0_CLIENT_ID
 const authClientSecret = process.env.AUTH0_CLIENT_SECRET
 const authAudience = process.env.AUTH_AUDIENCE
 
+interface Auth0Response {
+    access_token: string;
+    error_description?: string;
+    // Add other fields as needed
+  }
+  
+
 async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
     const controller = new AbortController()
     const id = setTimeout(() => controller.abort(), timeout)
@@ -51,7 +58,7 @@ async function getAccessToken() {
     });
    
 
-    const data = await res.json();
+    const data = await res.json() as Auth0Response;
     //console.log('Response data:', data);
 
 
@@ -161,7 +168,7 @@ export  const DELETE = async (req: any, res:any) => {
             console.error(error)
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
-    } catch (error) {
+    } catch (error:any) {
         console.error(error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }

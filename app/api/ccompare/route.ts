@@ -5,7 +5,9 @@ import { NextResponse } from "next/server"
 // Cache for storing data
  
 
-export async function GET(req) {
+import { NextApiRequest } from "next";
+
+export async function GET(req: NextApiRequest) {
     const cc_api_key = process.env.CC_API_KEY;
     console.log(req.query)
     if(!cc_api_key) {
@@ -17,9 +19,9 @@ export async function GET(req) {
   
 
     // Fetch new data
-    let res = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?api_key=${cc_api_key}`);
-    const data = await res.json();
-    //console.log(data);  
+    let res = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?api_key=${cc_api_key}`, {cache: "no-cache"});
+    const data = await res.json() as unknown as { Data: Record<string, any> }  ;
+     //console.log(data);  
 
     // Update cache
    

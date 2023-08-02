@@ -19,6 +19,11 @@ interface CustomLimitOrderProps {
     freeBalances: Balance[]
 }
 
+interface PriceData {
+    symbol: string;
+    price: string;
+  }
+
 type Order = {
     symbol: string;
     side: string;
@@ -56,16 +61,15 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     // Constants
 
     const percentages = ["25", "50", "75", "100"]
-
     // Price feed
     useEffect(() => {
         const fetchPriceData = async () => {
             try {
-                const res = await fetch("/api/priceFeed")
-                const data = await res.json()
+                const res = await fetch("/api/priceFeed", {cache: "no-cache"})
+                const data = await res.json() as { data: PriceData[] }
                 // Assuming the symbol data is in the form { symbol: 'BTCUSDT', price: '45000.00' }
                 const symbolData = data.data.find(
-                    (item: any) => item.symbol === symbol.toUpperCase(),
+                    (item: PriceData) => item.symbol === symbol.toUpperCase(),
                 )
                 if (symbolData) {
                     setCurrentPrice(parseFloat(symbolData.price))
@@ -218,6 +222,11 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
         return { ...orderBase, ...orderDetail }
     }
 
+    interface OrderResponse {
+        orderId: string;
+        // Add any other properties that are returned by the API
+    }
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
 
@@ -233,7 +242,7 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
 
         try {
             const response = await apiService.createOrder(order)
-            const data = await response.json()
+            const data = await response.json() as OrderResponse
             setOrderId(data.orderId)
             console.log(data)
         } catch (error) {
@@ -264,52 +273,52 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
         }
     }
 
-    const submitOCOOrder = async (
-        symbol: string,
-        takeProfit: number,
-        stopLoss: number,
-        entryPrice: number,
-        quoteCurrencyAmount: number,
-        setTakeProfit: (value: number) => void,
-        setStopLoss: (value: number) => void,
-        setOrderId: (value: string) => void
-      ): Promise<void> => {
-        const order: Order = {
-          symbol,
-          side: "BUY",
-          quantity: quoteCurrencyAmount,
-          price: entryPrice,
-          stopPrice: stopLoss,
-          stopLimitPrice: takeProfit,
-          timeInForce: "GTC",
-          newOrderRespType: "FULL",
-        };
+    // const submitOCOOrder = async (
+    //     symbol: string,
+    //     takeProfit: number,
+    //     stopLoss: number,
+    //     entryPrice: number,
+    //     quoteCurrencyAmount: number,
+    //     setTakeProfit: (value: number) => void,
+    //     setStopLoss: (value: number) => void,
+    //     setOrderId: (value: string) => void
+    //   ): Promise<void> => {
+    //     const order: Order = {
+    //       symbol,
+    //       side: "BUY",
+    //       quantity: quoteCurrencyAmount,
+    //       price: entryPrice,
+    //       stopPrice: stopLoss,
+    //       stopLimitPrice: takeProfit,
+    //       timeInForce: "GTC",
+    //       newOrderRespType: "FULL",
+    //     };
       
-        try {
-          const response = await fetch("/api/orders", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(order),
-          });
+    //     try {
+    //       const response = await fetch("/api/orders", {
+    //         method: "POST",
+    //         headers: {
+    //           "Content-Type": "application/json",
+    //         },
+    //         body: JSON.stringify(order),
+    //       });
       
-          if (!response.ok) {
-            throw new Error("Network response was not ok");
-          }
+    //       if (!response.ok) {
+    //         throw new Error("Network response was not ok");
+    //       }
       
-          const data = await response.json();
+    //       const data = await response.json();
       
-          // Ensure order was successful before updating state
-          if (data.data && data.data.status === "SUCCESS") {
-            setOrderId(data.data.orderId);
-            setStopLoss(stopLoss);
-            setTakeProfit(takeProfit);
-          }
-        } catch (error) {
-          console.error("There has been a problem with your fetch operation:", error);
-        }
-      };
+    //       // Ensure order was successful before updating state
+    //       if (data.data && data.data.status === "SUCCESS") {
+    //         setOrderId(data.data.orderId);
+    //         setStopLoss(stopLoss);
+    //         setTakeProfit(takeProfit);
+    //       }
+    //     } catch (error) {
+    //       console.error("There has been a problem with your fetch operation:", error);
+    //     }
+    //   };
 
     return (
         <form onSubmit={handleSubmit}>
