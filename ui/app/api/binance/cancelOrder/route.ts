@@ -1,10 +1,11 @@
+
 // export const runtime = 'nodejs'
 
 
 import { withApiAuthRequired, getSession } from "@auth0/nextjs-auth0"
-import { NextResponse } from "next/server"
+import { NextResponse, NextRequest } from "next/server"
 import crypto from "crypto"
-
+import  {NextApiRequest, NextApiResponse} from 'next'
 
 const apiKey = process.env.BINANCE_API_KEY
 const apiSecret = process.env.BINANCE_SECRET_KEY
@@ -73,7 +74,7 @@ async function getAccessToken() {
     }
 }
 
-const DELETE = withApiAuthRequired( async (req: any, res:any) => {
+const DELETE = withApiAuthRequired( async (req: NextApiRequest) => {
     try {
         console.log("getting access token")
         const accessToken = await getAccessToken();
@@ -91,11 +92,11 @@ const DELETE = withApiAuthRequired( async (req: any, res:any) => {
         }
     
      
-        const { searchParams} = new URL(req.url)
+        const { searchParams } = new URL(req.url || '', 'http://localhost')
         console.log("search params", searchParams)
         let body 
         try {
-            body = await req.json();
+            body = await req.body;
             console.log("body",  NextResponse.json({ body: body }, { status: 200 }))
         } catch (error) {
             console.error('Error parsing request body:', error);
@@ -153,23 +154,24 @@ const DELETE = withApiAuthRequired( async (req: any, res:any) => {
                 const data = await response.json()
                 console.log("Response from Binance API:", data)
                 console.log("body data", body)
-                return NextResponse.json({ data }, { status: 200 })
+                return NextResponse.json({ data }, { status: 200 }) as NextResponse;
+
             } else {
                 try {
                     const errordata = await response.json()
                     console.error("Error response from Binance API:", errordata)
                 } catch (e: any) {
                     console.error("Failed to parse error response from Binance API:", e)
-                    return NextResponse.json({ error: e.message }, { status: 500 })
+                    return  NextResponse.json({ error: e.message }, { status: 500 }) as NextResponse;
                 }
             }
         } catch (error: any) {
             console.error(error)
-            return NextResponse.json({ error: error.message }, { status: 500 })
+            return NextResponse.json({ error: error.message }, { status: 500 }) as NextResponse
         }
     } catch (error:any) {
         console.error(error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: error.message }, { status: 500 }) as NextResponse
     }
 })
 
