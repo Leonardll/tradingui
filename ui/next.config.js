@@ -2,14 +2,15 @@
 const nextConfig = {
     experimental: {
         serverActions: true,
-        topLevelAwait: true,
+        appDir: true,
     },
     webpack: (config) => {
         config.resolve.fallback = {
             ...config.resolve.fallback,
             net: false,
             os: false,
-        }
+        },
+        config.experiments = { ...config.experiments, topLevelAwait: true }
         return config
     },
     images: {
