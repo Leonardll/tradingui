@@ -179,7 +179,7 @@ export const POST = async (req: any, res:any) => {
             console.error(error)
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
-    } catch (error) {
+    } catch (error:any) {
         console.error(error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
