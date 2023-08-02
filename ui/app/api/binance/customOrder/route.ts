@@ -1,5 +1,5 @@
 // // export const dynamicParams = true;
- export const runtime = 'edge'
+//  export const runtime = 'edge'
 
 import { withApiAuthRequired, getSession } from "@auth0/nextjs-auth0"
 import { NextResponse } from "next/server"
