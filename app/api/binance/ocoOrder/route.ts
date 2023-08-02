@@ -26,6 +26,27 @@ type OrderRequest = {
     newOrderRespType?: string;
 };
 
+
+interface Auth0Response {
+    access_token: string;
+    error_description?: string;
+    // Add other fields as needed
+  }
+  interface SymbolInfo {
+    symbol: string;
+    filters: Filter[];
+  }
+
+  interface Filter {
+    filterType: string;
+    stepSize?: string;
+    tickSize?: string;
+    // Add other properties as needed
+  }
+
+  interface ExchangeInfo {
+    symbols: SymbolInfo[];
+  }
 async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
@@ -38,12 +59,15 @@ async function fetchWithTimeout(resource: string, options: object, timeout = 100
 
 async function getFilters(symbol: string) {
     const response = await fetch(`${binanceTestUrl}/exchangeInfo`);
-    const exchangeInfo = await response.json();
+    const exchangeInfo = await response.json() as ExchangeInfo;
     const symbolInfo = exchangeInfo.symbols.find((s: any) => s.symbol === symbol);
 
-    const lotSizeFilter = symbolInfo.filters.find((f: any) => f.filterType === "LOT_SIZE");
-    const priceFilter = symbolInfo.filters.find((f: any) => f.filterType === "PRICE_FILTER");
-
+    const lotSizeFilter = symbolInfo?.filters.find((f: any) => f.filterType === "LOT_SIZE");
+    const priceFilter = symbolInfo?.filters.find((f: any) => f.filterType === "PRICE_FILTER");
+      
+    if (!lotSizeFilter || !priceFilter) {
+        throw new Error("Filters not found for the given symbol");
+      }
     return { lotSizeFilter, priceFilter };
 }
 
@@ -67,7 +91,7 @@ async function getAccessToken() {
         body: JSON.stringify(body)
     });
 
-    const data = await res.json();
+    const data = await res.json() as Auth0Response;
 
     if (res.ok) {
         return data.access_token;
@@ -76,7 +100,7 @@ async function getAccessToken() {
     }
 }
 
-const POST = async (req:any, res ) => {
+const POST = withApiAuthRequired(async (req:any, res:any ) => {
     try {
         const accessToken = await getAccessToken();
 
@@ -97,10 +121,10 @@ const POST = async (req:any, res ) => {
         }
 
         const { lotSizeFilter, priceFilter } = await getFilters(symbol);
-
+         
         // Calculate precision for quantity and price
-        const quantityPrecision = parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0;
-        const pricePrecision = parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0;
+        const quantityPrecision = lotSizeFilter.stepSize ? parseFloat(lotSizeFilter.stepSize).toString().split(".")[1]?.length || 0 : 0;
+        const pricePrecision = priceFilter.tickSize ? parseFloat(priceFilter.tickSize).toString().split(".")[1]?.length || 0 : 0;
 
         // Adjust quantity and price to the correct precision
         let adjustedQuantity = roundToPrecision(parseFloat(quantity), quantityPrecision);
@@ -172,5 +196,5 @@ const POST = async (req:any, res ) => {
         return NextResponse.json({ name: error.message });
     }
 }
-
-export default withApiAuthRequired(POST);
+);
+export {POST};

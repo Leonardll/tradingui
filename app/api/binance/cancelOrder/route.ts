@@ -73,8 +73,7 @@ async function getAccessToken() {
     }
 }
 
-
-export  const DELETE = async (req: any, res:any) => {
+const DELETE = withApiAuthRequired( async (req: any, res:any) => {
     try {
         console.log("getting access token")
         const accessToken = await getAccessToken();
@@ -172,6 +171,6 @@ export  const DELETE = async (req: any, res:any) => {
         console.error(error)
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
-}
+})
 
-export default withApiAuthRequired(DELETE)
+export {DELETE}
