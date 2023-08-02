@@ -2,6 +2,7 @@
 const nextConfig = {
     experimental: {
         serverActions: true,
+        topLevelAwait: true,
     },
     webpack: (config) => {
         config.resolve.fallback = {
