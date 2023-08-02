@@ -74,7 +74,7 @@ async function getAccessToken() {
     }
 }
 
-const DELETE = withApiAuthRequired( async (req: NextApiRequest) => {
+const DELETE = withApiAuthRequired(async (req: NextApiRequest, res: NextApiResponse) => {
     try {
         console.log("getting access token")
         const accessToken = await getAccessToken();
@@ -96,14 +96,14 @@ const DELETE = withApiAuthRequired( async (req: NextApiRequest) => {
         console.log("search params", searchParams)
         let body 
         try {
-            body = await req.body;
+            body = req.body;
             console.log("body",  NextResponse.json({ body: body }, { status: 200 }))
         } catch (error) {
             console.error('Error parsing request body:', error);
             return NextResponse.json({ error: 'Invalid request body' }, { status: 400});
         }
     
-        if (!body || !body.symbol || !body.orderId  ) {
+        if (!body || !body.symbol || !body.orderId) {
             throw new Error("Invalid request body!")
         }
     
