@@ -3,6 +3,8 @@ const nextConfig = {
     experimental: {
         serverActions: true,
         appDir: true,
+        serverComponentsExternalPackages: ["mongoose"]
+
     },
     webpack: (config) => {
         config.resolve.fallback = {

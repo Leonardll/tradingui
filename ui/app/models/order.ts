@@ -1,4 +1,4 @@
-import mongoose, { Document } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IFill {
   price: string;
@@ -27,7 +27,7 @@ export interface IOrder extends Document {
   fills: IFill[];
 }
 
-const fillSchema = new mongoose.Schema<IFill>({
+const fillSchema = new Schema<IFill>({
   price: String,
   qty: String,
   commission: String,
@@ -35,7 +35,7 @@ const fillSchema = new mongoose.Schema<IFill>({
   tradeId: Number,
 });
 
-const orderSchema = new mongoose.Schema<IOrder>({
+const orderSchema = new Schema<IOrder>({
   symbol: String,
   orderId: Number,
   orderListId: Number,
@@ -54,7 +54,10 @@ const orderSchema = new mongoose.Schema<IOrder>({
   fills: [fillSchema],
 });
 
-const Order = mongoose.model<IOrder>('Order', orderSchema);
+// Check if the model is already compiled
+if (!mongoose.models.Order) {
+  mongoose.model<IOrder>('Order', orderSchema);
+}
 
-export default Order;
-
+// Export the model
+export default mongoose.models.Order;

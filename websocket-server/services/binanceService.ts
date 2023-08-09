@@ -4,7 +4,7 @@ import http from 'http';
 import dotenv from 'dotenv';
 import {v4 as uuidv4} from 'uuid';
 import { WebSocket, Server  } from 'ws'; 
-dotenv.config();
+dotenv.config({path: '.env.local'});
 
 const apiKey = process.env.API_KEY;
 const apiSecret = process.env.API_SECRET;
@@ -31,7 +31,7 @@ interface BinanceResponse {
 
 
 export async function getUserDataStream() {
-  const { data } = await axios.post(`${binanceTestUrl}/userDataStream`, {}, { headers: { 'X-MBX-APIKEY': testApiKey } });
+  const { data } = await axios.post(`${binanceTestUrl}/userDataStream`, null, { headers: { 'X-MBX-APIKEY': testApiKey } });
   return data.listenKey;
 }
 
@@ -74,8 +74,8 @@ export async function cancelOrder(order : Order) {
 
 
 export async function getAllOrders(symbol: string): Promise<Order[]> {
-  return new Promise((resolve, reject) => {
-    const listenKey = getUserDataStream();
+  return new Promise( async (resolve, reject) => {
+    const listenKey = await getUserDataStream();
     const wsUserData = new WebSocket(`${wsTestURL}/${listenKey}`);
 
 

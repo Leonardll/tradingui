@@ -40,7 +40,7 @@ async function fetchWithTimeout(resource, options, timeout = 1000) {
     return response
 }
 
-export const GET = async () => {
+const GET = withApiAuthRequired (async () => {
     if (!testApiSecret) {
         throw new Error("API secret is not defined!")
     }
@@ -82,6 +82,6 @@ export const GET = async () => {
     const data = await res.json()
 
     return NextResponse.json({ data })
-}
+})
 
-export default withApiAuthRequired(GET)
+export { GET }

@@ -1,12 +1,11 @@
-// // export const dynamicParams = true;
-//  export const runtime = 'edge'
+ export const dynamicParams = true;
+ //export const runtime = 'nodejs'
 
 import { withApiAuthRequired, getSession } from "@auth0/nextjs-auth0"
 import { NextResponse } from "next/server"
 import crypto from "crypto"
-import dbConnect from "@/app/ libs/mongodb"
 import Order from "@/app/models/order"
-
+import dbConnect from "@/app/libs/mongodb"
 const apiKey = process.env.BINANCE_API_KEY
 const apiSecret = process.env.BINANCE_SECRET_KEY
 
@@ -207,7 +206,7 @@ async function getAccessToken() {
                 const data = await response.json() as BinanceResponse
                 console.log("Response from Binance API:", data)
                 console.log("body data", body)
-                await dbConnect();
+                await dbConnect.dbConnect();
                 const order = new Order(data);
                 await order.save();
                 return NextResponse.json({ data }, { status: 200 })

@@ -64,7 +64,7 @@ async function getOrdersForSymbol(symbol: any) {
   }
   
 
-export const GET = async (req:unknown, res:unknown) => {
+ const GET =  withApiAuthRequired(async (req:unknown, res:unknown) => {
     if (!testApiSecret) {
         throw new Error("API secret is not defined!");
     }
@@ -108,9 +108,9 @@ export const GET = async (req:unknown, res:unknown) => {
 
 
     return NextResponse.json({ allOrders });
-}
+})
 
-export default withApiAuthRequired(GET);
+export {GET};
 
 
 
