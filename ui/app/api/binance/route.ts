@@ -21,6 +21,10 @@ type timeout = {
     timeout: number
 }
 
+interface TimeData {
+    serverTime: number
+}
+
 const apiKey = process.env.BINANCE_API_KEY
 const apiSecret = process.env.BINANCE_SECRET_KEY
 
@@ -30,7 +34,7 @@ const binanceUrl = process.env.BINANCE_URL
 const binanceTestUrl = process.env.BINANCE_TEST_URL
 
 
-async function fetchWithTimeout(resource, options, timeout = 1000) {
+async function fetchWithTimeout(resource: string, options: object, timeout = 1000) {
     const controller = new AbortController()
     const id = setTimeout(() => controller.abort(), timeout)
 
@@ -47,7 +51,7 @@ const GET = withApiAuthRequired (async () => {
     // Fetch server time from Binance and calculate latency
     const start = Date.now()
     let timeRes = await fetch(`${binanceTestUrl}/time`)
-    let timeData = await timeRes.json()
+    let timeData = await timeRes.json() as TimeData
     const end = Date.now()
     const latency = end - start
 
@@ -80,7 +84,6 @@ const GET = withApiAuthRequired (async () => {
         5000,
     )
     const data = await res.json()
-
     return NextResponse.json({ data })
 })
 

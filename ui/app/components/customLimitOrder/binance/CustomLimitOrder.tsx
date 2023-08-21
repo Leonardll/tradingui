@@ -273,52 +273,7 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
         }
     }
 
-    // const submitOCOOrder = async (
-    //     symbol: string,
-    //     takeProfit: number,
-    //     stopLoss: number,
-    //     entryPrice: number,
-    //     quoteCurrencyAmount: number,
-    //     setTakeProfit: (value: number) => void,
-    //     setStopLoss: (value: number) => void,
-    //     setOrderId: (value: string) => void
-    //   ): Promise<void> => {
-    //     const order: Order = {
-    //       symbol,
-    //       side: "BUY",
-    //       quantity: quoteCurrencyAmount,
-    //       price: entryPrice,
-    //       stopPrice: stopLoss,
-    //       stopLimitPrice: takeProfit,
-    //       timeInForce: "GTC",
-    //       newOrderRespType: "FULL",
-    //     };
-      
-    //     try {
-    //       const response = await fetch("/api/orders", {
-    //         method: "POST",
-    //         headers: {
-    //           "Content-Type": "application/json",
-    //         },
-    //         body: JSON.stringify(order),
-    //       });
-      
-    //       if (!response.ok) {
-    //         throw new Error("Network response was not ok");
-    //       }
-      
-    //       const data = await response.json();
-      
-    //       // Ensure order was successful before updating state
-    //       if (data.data && data.data.status === "SUCCESS") {
-    //         setOrderId(data.data.orderId);
-    //         setStopLoss(stopLoss);
-    //         setTakeProfit(takeProfit);
-    //       }
-    //     } catch (error) {
-    //       console.error("There has been a problem with your fetch operation:", error);
-    //     }
-    //   };
+  
 
     return (
         <form onSubmit={handleSubmit}>

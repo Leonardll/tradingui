@@ -134,8 +134,6 @@ async function getAccessToken() {
 
         
     
-        // let timeRes = await fetch("https://api.binance.com/api/v3/time")
-        // let timeData = await timeRes.json()
     
         const body = await req.json()
     

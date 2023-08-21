@@ -1,7 +1,7 @@
 import { Request } from 'express';
 import {Server, WebSocket,} from 'ws';
 import http from 'http';
-import { getUserDataStream, cancelOrder } from './services/binanceService';
+import { getUserDataStream, cancelOrder, getOrderStatusFromBinance, handleUserDataMessage, checkConnection } from './services/binanceService';
 import { eventEmitter } from './events/eventEmitter';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
@@ -9,8 +9,12 @@ import { connectToMongoDB } from './mongodb'
 import { AllTrades} from './models/orderModels';
 import dotenv from 'dotenv';
 dotenv.config({path: '.env.local'});
+
+
+
 let isUpdating = false;
 const wsTestURL = process.env.BINANCE_TEST_WS_URL;
+const wsTestURL2 = "wss://testnet.binance.vision/ws-api/v3"
 const wsExchangeInfoURL = 'wss://testnet.binance.vision/ws-api/v3';
 const  testApiKey = process.env.BINANCE_TEST_API_KEY;
 const  testApiSecret = process.env.BINANCE_TEST_API_SECRET_KEY;
@@ -25,6 +29,7 @@ interface Order {
   origClientOrderId: string;
   action?: string;
   order?: string;
+  status?: string;
 }
 
 interface Data {
@@ -98,31 +103,10 @@ interface BinanceResponse {
 }
 
 
-async function updateOrdersForSymbol(symbol: string, newOrders: Order[]) {
-  try {
-    while (isUpdating) {
-      // Wait a bit before checking again
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    isUpdating = true;
-    console.log(`Updating orders for ${symbol}:`, newOrders);
-
-    // Update the orders
-    ordersForSymbol[symbol] = newOrders;
-    console.log(`Updated orders for ${symbol}:`, ordersForSymbol[symbol]);
 
 
-    isUpdating = false;
-  } catch (error) {
-    console.error('Error updating orders for symbol:', error);
-  }
-}
-
-
-
-async function getAllOrders() {
-    return await AllTrades.find({}).lean();
+async function getAllOrdersFromMongo() {
+    return await AllTrades.find({status: "NEW"}).lean();
 }
 
 
@@ -135,8 +119,8 @@ async function updateOrderInDatabase(order: Order) {
 
 
 
-// Create a WebSocket connection to the Binance exchange info endpoint
-const wsExchangeInfo = new WebSocket(`wss://testnet.binance.vision/ws-api/v3`);
+// WebSocket connection to the Binance exchange info endpoint
+const wsExchangeInfo = new WebSocket(`${wsTestURL}`);
 
 // Listen for the WebSocket connection to open
 wsExchangeInfo.on('open', () => {
@@ -202,86 +186,16 @@ export function setupWebSocketServer(server: http.Server) {
 
   }
   wss.on('connection', async (wsClient: WebSocket, req: Request ) => {
-    console.log('new client connected - userdatastream - trade status');
-
-    const listenKey = await getUserDataStream();
-    console.log('listenKey:', listenKey);
-    const wsUrl = `${wsTestURL}/${listenKey}`
-    console.log('wsUrl:', wsUrl);
-    const wsUserData = new WebSocket(wsUrl);
-    const symbol = new URL(req.url, `http://${req.headers.host}`).searchParams.get('symbol');
+    console.log('new client connected - userdatastream - trade status')
       
-
-    wsUserData.on('open', async () => {
-      console.log('WebSocket connection to user data opened');
-    
-      // Fetch the current orders from the database
-      const currentOrders = await getAllOrders(); // Assume this function fetches all orders
-    
-      // Iterate through the orders and query each one
-      for (const order of currentOrders) {
-        const symbol = order.symbol;
-        const orderId = order.orderId.toString();
-        const requestId = uuidv4(); // Generate a unique request ID
-    
-        wsUserData.send(JSON.stringify({
-          id: requestId,
-          method: 'queryOrder',
-          params: { symbol, orderId }
-        }));
-      }
-    });
-      wsUserData.on('message', async (message: string) => {
-
-
-        const data = JSON.parse(message) as Data
-        
-        if (data.e === 'executionReport' && data.x === 'TRADE' && data.s === symbol) {
-          // This is an update about an order being filled
-          const symbol = data.s;
-          const orderId = data.i;
-          try {
-
-            console.log("attempt update trade status")
-            const result =  await AllTrades.updateOne({ symbol, orderId }, { status: "FILLED" });
-            console.log("Update result", result)
-          } catch (error) {
-             console.error('Error updating order status:', error);
-          }
-          console.log(`Order ${data.i} was filled. Executed quantity: ${data.l}`);
-          wsClient.send(JSON.stringify({ orderFilled: true, orderId: orderId }));
-          
-          
-           if (!ordersForSymbol[symbol]) {
-            ordersForSymbol[symbol] = [];
-          }
-          ordersForSymbol[symbol].push(data);
-          console.log(`Updated orders for symbol ${symbol}:`, ordersForSymbol[symbol]);  // Log the updated orders
-          symbol && await updateOrdersForSymbol(symbol, [...ordersForSymbol[symbol] || [], data]);
-
-        } else if (data.id && data.result) {
-          const updatedOrder = data.result[0] as Order;
-
-          // await updateOrderInDatabase(updatedOrder); // Assume this function updates the order
-          // console.log('Order updated:', updatedOrder);
-          // Update the orders
-         symbol && await updateOrdersForSymbol(symbol, data.result);
-        }
-      });
    
 
-     
-      
-    
+     wsExchangeInfo.on('error', (error) => { console.error('Websocket error:', error) });
 
-
- 
-    wsExchangeInfo.on('error', (error) => { console.error('Websocket error:', error) });
-
-    wsExchangeInfo.on('close', (code, reason) => {
-      console.log(`WebSocket connection to exchange info closed, code: ${code}, reason: ${reason}`);
-      // You could also try to reconnect here if you want
-    });
+     wsExchangeInfo.on('close', (code, reason) => {
+       console.log(`WebSocket connection to exchange info closed, code: ${code}, reason: ${reason}`);
+    //   // You could also try to reconnect here if you want
+     });
  
     
     
@@ -311,7 +225,7 @@ export function setupWebSocketServer(server: http.Server) {
 
     wsClient.on('close', function close() {
       console.log('Client disconnected');
-      wsUserData.close();
+     // wsUserData.close();
       wsExchangeInfo.close();
 
     });
@@ -319,16 +233,8 @@ export function setupWebSocketServer(server: http.Server) {
     wsClient.on('error', function error(err) {
       console.log('WebSocket error:', err.message);
     });
-    wsUserData.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-    
-    wsUserData.onerror = (event) => {
-      console.log('WebSocket error:', event.message);
-    };
-    wsUserData.on('close', (code, reason) => {
-      console.log(`WebSocket connection closed, code: ${code}, reason: ${reason}`);
-    });
+  //  // wsUserData.on('error', (error) => {
+
   });
 }
 
@@ -338,3 +244,5 @@ export async function getExchangeInfo() {
   }
   return exchangeInfo;
 }
+
+

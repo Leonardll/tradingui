@@ -42,6 +42,13 @@ const OrderTable: React.FC = () => {
     const tableTitle = [{ id: 1, title: "Symbol" }, { id:2, title: "Side" }, { id:3,  title: "Type" }, { id: 4, title: "Quantity" }, { id: 5, title: " Filled Quantity" }, { id: 6, title: "Status" },{id: 7, title: "Limit Price"}, { id:8, title: "Stop Price" }, { id: 9, title: "Order Id"}, {id:10 , title: "Cancel Order"}]
     const cryptoCompareBaseUrl = "https://cryptocompare.com"
 
+    // useEffect(() => {
+    //     const wsClient = new WebSocketClient("ws://localhost:4000/ws");
+    //     wsClient.onMessage(handleWebSocketMessage);
+    //     setWs(wsClient);
+    
+    //     return () => wsClient.close(); // Close WebSocket on component unmount
+    //   }, []);
     useEffect(() => {
         const fetchOrders = async () => {
 
