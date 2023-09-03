@@ -19,7 +19,7 @@ export async function GET(req: NextApiRequest) {
   
 
     // Fetch new data
-    let res = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?api_key=${cc_api_key}`, {cache: "no-cache"});
+    let res = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?api_key=${cc_api_key}`, {cache: "no-store"});
     const data = await res.json() as unknown as { Data: Record<string, any> }  ;
      //console.log(data);  
 

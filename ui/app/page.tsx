@@ -1,4 +1,5 @@
 "use client"
+export const dynamic = 'force-dynamic'
 
 import Image from "next/image"
 import { useEffect, useState } from "react"
@@ -259,6 +260,7 @@ const Home = () => {
             return <div>Loading...</div>
         }
     }
+    checkIfUserLoggedIn()
     // if (customError) {
     //     console.log(customError)
     //     return <div>Custom Error: {customError.message}</div>
@@ -352,10 +354,10 @@ const Home = () => {
             <div className="flex">
                 <CustomLimitOrder freeBalances={walletData} />
             </div>
-            <div>
+            <div className="flex justify-center">
                 <BTCPriceComponent />
             </div>
-            <div className="div">
+            <div className="flex justify-center">
                 <h3>Orders</h3>
                 <OrderTable />
             </div>

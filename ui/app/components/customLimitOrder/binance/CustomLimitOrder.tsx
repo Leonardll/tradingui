@@ -1,4 +1,6 @@
 "use client"
+export const dynamic = 'force-dynamic'
+
 import React, { use, useState, useEffect } from "react"
 import { useWebSocket } from "../../../hooks/useWebSocket"
 import InputField from "./inputField"
@@ -8,6 +10,7 @@ import { getQuoteCurrency } from "@/app/utils/getQuoteCurrency"
 import apiService from "@/app/utils/apiService"
 import SubmitButton from "./submitButton"
 import OCOOrder from "./OCOOrder"
+import { set } from "mongoose"
 
 interface Balance {
     asset: string
@@ -35,6 +38,28 @@ type Order = {
     newOrderRespType?: string;
   };
 
+  interface WebSocketMessage {
+    orderId: string;
+    eventType: string;
+    orderStatus: string;
+    // Add other properties as needed, based on the structure of the messages you expect to receive
+    // For example:
+    // price?: number;
+    // quantity?: number;
+    // side?: string;
+    // symbol?: string;
+    // etc.
+  }
+
+  interface OrderResponse {
+    data : {
+        orderId: string;
+        symbol: string;
+    }
+
+    // Add any other properties that are returned by the API
+}
+
 const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     freeBalances,
 }: CustomLimitOrderProps) => {
@@ -56,8 +81,14 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     const [takeProfitPrice, setTakeProfitPrice] = useState("")
     const [stopPrice, setStopPrice] = useState("")
     const [debouncedSymbol, setDebouncedSymbol] = useState("")
-    const { data, error } = useWebSocket(debouncedSymbol)
+    const [orderAccepted, setOrderAccepted] = useState(false)
+    const wsUrl = 'ws://localhost:4000/userTradeStream'
+   
+    if (!wsUrl) {
+        throw new Error("Binance WebSocket URL not found")
+    }
     const [orderId, setOrderId] = useState<string |undefined>(undefined)
+ 
     // Constants
 
     const percentages = ["25", "50", "75", "100"]
@@ -65,7 +96,7 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
     useEffect(() => {
         const fetchPriceData = async () => {
             try {
-                const res = await fetch("/api/priceFeed", {cache: "no-cache"})
+                const res = await fetch("/api/priceFeed", {cache: "no-store", next:{ revalidate: 0}})
                 const data = await res.json() as { data: PriceData[] }
                 // Assuming the symbol data is in the form { symbol: 'BTCUSDT', price: '45000.00' }
                 const symbolData = data.data.find(
@@ -172,7 +203,20 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
             setQuoteCurrency(quoteCurrency)
         }
     }, [symbol, freeBalances])
-
+    const { data, error } = useWebSocket(symbol, orderAccepted, orderId);
+    console.log(orderId, orderAccepted, symbol)
+    console.log(data)
+// trade stream message
+    useEffect(() => {
+        if (data) {
+            const message = JSON.parse(data) as WebSocketMessage;
+            // Handle the WebSocket message here, e.g., update the UI or trigger other actions
+            console.log('Received WebSocket message:', message);
+        } else {
+            console.log('No data received from WebSocket');
+        }
+    }, [data]);
+    
     const handleOrderTypeChange = (value: string) => {
         setType(value)
 
@@ -222,10 +266,7 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
         return { ...orderBase, ...orderDetail }
     }
 
-    interface OrderResponse {
-        orderId: string;
-        // Add any other properties that are returned by the API
-    }
+
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
@@ -243,13 +284,13 @@ const CustomLimitOrder: React.FC<CustomLimitOrderProps> = ({
         try {
             const response = await apiService.createOrder(order)
             const data = await response.json() as OrderResponse
-            setOrderId(data.orderId)
-            console.log(data)
+            setOrderId(data.data.orderId)
+            setOrderAccepted(true)
         } catch (error) {
             console.error(error)
+            setOrderAccepted(false)
         }
     }
-
     const handlePercentageClick = (
         event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
         percentage: string,

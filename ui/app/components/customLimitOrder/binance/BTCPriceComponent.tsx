@@ -1,39 +1,44 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react';
 
 function BTCPriceComponent() {
   const [btcPrice, setBtcPrice] = useState(null);
+  const [symbol, setSymbol] = useState(null);
+
+ 
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:4000/priceFeed?symbol=btcusdt');
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data) as any
+      setBtcPrice(data.k.c);
+      setSymbol(data.s);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket closed');
+    };
+
+    ws.onerror = (error) => {
+      console.log('WebSocket Error:', error);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [])
 
   useEffect(() => {
-    fetch('/api/priceFeed') // replace with your actual endpoint
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        console.log(data); // log the fetched data
-        const btcData = data.data.filter(item => item.symbol === 'BTCUSDT');
-        console.log(btcData); // log the filtered data
-        if (btcData.length > 0) {
-          setBtcPrice(btcData[0].price);
-        }
-      })
-      .catch(error => {
-        console.log('There was an error!', error);
-      });
-  }, []);
-
-  useEffect(() => {
-    console.log(btcPrice);
+    //console.log(btcPrice);
   }, [btcPrice]);
+
 
   return (
     <div>
-      Current BTC price: {btcPrice}
+     {` Current price for ${symbol}: ${btcPrice}`}
     </div>
   );
 }

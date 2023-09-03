@@ -21,7 +21,27 @@ interface SymbolInfo {
     // include other properties as needed
 }
 
-type ExchangeInfo = SymbolInfo[];
+
+interface RateLimit {
+  rateLimitType: string;
+  interval: string;
+  intervalNum: number;
+  limit: number;
+}
+
+interface ExchangeInfoData {
+  id: string;
+  status: number;
+  method: string;
+  result: {
+    timezone: string;
+    serverTime: number;
+    rateLimits: RateLimit[];
+    exchangeFilters: any[]; // replace 'any' with the actual type if you know it
+    symbols: SymbolInfo[];
+  };
+  rateLimits: RateLimit[];
+}
 
 interface TimeData {
     serverTime: number;
@@ -55,7 +75,6 @@ async function getOrdersForSymbol(symbol: any) {
   
       // Parse the response data as JSON
       const data = await res.json();
-  
       return data;
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -81,9 +100,9 @@ async function getOrdersForSymbol(symbol: any) {
               throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json() as ExchangeInfo;
-          //  console.log('Data from /exchangeInfo endpoint:', data[0]); // Add this line
-            const symbols:any = data?.map(symbolInfo => symbolInfo.symbol);
+            const data = await response.json() as ExchangeInfoData;
+           //console.log('Data from /exchangeInfo endpoint:', data); // Add this line
+            const symbols:any = data.result.symbols?.map(symbolInfo => symbolInfo.symbol);
             // console.log('symbols', symbols) 
             return symbols;
         } catch (error:any) {

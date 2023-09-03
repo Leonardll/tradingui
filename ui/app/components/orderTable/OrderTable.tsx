@@ -39,29 +39,22 @@ const OrderTable: React.FC = () => {
     const [orders, setOrders] = useState<Array<Order> | null> ([])
     const [tickerData, setTickerData] = useState<any>({})
     const [ws, setWs] = useState<WebSocketClient | null>(null)
-    const tableTitle = [{ id: 1, title: "Symbol" }, { id:2, title: "Side" }, { id:3,  title: "Type" }, { id: 4, title: "Quantity" }, { id: 5, title: " Filled Quantity" }, { id: 6, title: "Status" },{id: 7, title: "Limit Price"}, { id:8, title: "Stop Price" }, { id: 9, title: "Order Id"}, {id:10 , title: "Cancel Order"}]
+    const tableTitle = [{ id: 1, title: "Symbol" }, { id:2, title: "Side" }, { id:3,  title: "Type" }, { id: 4, title:"Price" },{id:5, title:"Quantity"},{ id: 6, title: " Filled Quantity" }, { id: 7, title: "Status" },{id: 8, title: "Limit Price"}, { id:9, title: "Stop Price" }, { id: 10, title: "Order Id"}, {id:11 , title: "Cancel Order"}]
     const cryptoCompareBaseUrl = "https://cryptocompare.com"
 
-    // useEffect(() => {
-    //     const wsClient = new WebSocketClient("ws://localhost:4000/ws");
-    //     wsClient.onMessage(handleWebSocketMessage);
-    //     setWs(wsClient);
     
-    //     return () => wsClient.close(); // Close WebSocket on component unmount
-    //   }, []);
     useEffect(() => {
         const fetchOrders = async () => {
 
             try {
-
-                const response = await fetch("/api/binance/openOrder")
+                const response = await fetch("/api/binance/openOrder",{cache:"no-store" ,next:{revalidate:0}})
                 console.log("response from ordertable fetch", response)
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                   }
                 // ensure the correct endpoint
                 const data = await response.json() as OrdersResponse
-    
+               // console.log("data from ordertable fetch", data)
                 setOrders(data.allOrders)
             } catch (error) {
                 console.error('Failed to fetch orders:', error);
@@ -69,10 +62,7 @@ const OrderTable: React.FC = () => {
         }
 
         fetchOrders()
-    }, []) // only run once on component mount
-    useEffect(() => {
-         console.log(orders);
-    }, [orders]);
+    }, []) 
     
 
     // Fetch ticker data from CryptoCompare
@@ -174,9 +164,7 @@ async function cancelOrderClient  (order: Order) {
        orders && orders.length > 0 &&
             orders.map((order) => {
                 const [baseSymbol, quoteSymbol] = extractBaseSymbol(order.symbol)
-                // console.log("baseSymbol", baseSymbol);
-// console.log("quoteSymbol", quoteSymbol);
-// console.log("tickerData", tickerData);
+ 
                 const imageUrl1 =
                 tickerData && baseSymbol !== undefined && tickerData[baseSymbol]
                 ? `${cryptoCompareBaseUrl}${tickerData[baseSymbol]}`
@@ -207,11 +195,11 @@ async function cancelOrderClient  (order: Order) {
     }
 
     return (
-        <div className="flex flex-col">
+        <div className="flex flex-col flex-auto">
             <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
                 <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
                     <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
+                        <table className="table-auto  divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
                                 {tableTitle.map((title) => (
@@ -274,6 +262,9 @@ async function cancelOrderClient  (order: Order) {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                     {order.type}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {Math.round(Number(order.price))}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                     {order.origQty}
