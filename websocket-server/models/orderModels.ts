@@ -38,8 +38,8 @@ export interface IFill {
   });
 
   export const orderSchema = new Schema({
-    symbol: String,
-    orderId: Number,
+    symbol: { type: String, index: true },
+    orderId:{ type: Number, index: true},
     orderListId: Number,
     clientOrderId: String,
     transactTime: Number,
@@ -47,15 +47,16 @@ export interface IFill {
     origQty: String,
     executedQty: String,
     cummulativeQuoteQty: String,
-    status: String,
+    status: { type: String, index: true },
     timeInForce: String,
-    type: String,
-    side: String,
+    type:{ type: String, index: true},
+    side:{ type: String, index: true},
     workingTime: Number,
     selfTradePreventionMode: String,
     fills: [fillSchema],
 
 });
+orderSchema.index({ symbol: 1, status: 1 });
 
 
 
