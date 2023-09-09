@@ -66,7 +66,7 @@ async function getOrdersForSymbol(symbol: any) {
       const url = `http://localhost:4000/allOrders?symbol=${symbol}`;
   
       // Make a GET request to your server route
-      const res = await fetch(url);
+      const res = await fetch(url,{cache: "no-store", next:{revalidate:0}});
   
       // Check if the request was successful
       if (!res.ok) {
@@ -95,7 +95,7 @@ async function getOrdersForSymbol(symbol: any) {
         try {
            
 
-            const response = await fetch(`http://localhost:4000/exchangeInfo`);
+            const response = await fetch(`http://localhost:4000/exchangeInfo`,{cache: "no-store", next:{revalidate:0}});
             if (!response.ok) {
               throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -130,6 +130,7 @@ async function getOrdersForSymbol(symbol: any) {
 })
 
 export {GET};
+
 
 
 
