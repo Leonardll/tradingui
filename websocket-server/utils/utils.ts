@@ -1,9 +1,12 @@
 import { on } from 'events';
 import { set } from 'mongoose';
 import { WebSocket } from 'ws';
-import uuid from 'uuid';
+import { v4 as uuidv4} from 'uuid';
 import { EventEmitter } from 'events';
+import { CombinedStreamPayload, StreamType, StreamPayload } from './streamTypes';
 
+
+export type StreamCallback = (data: StreamPayload) => void;
 
 
 interface BinanceMessage {
@@ -19,8 +22,15 @@ interface RateLimitInfo {
     count: number;
   }
   type WebsocketCallback = (message: string | Buffer) => void;
-  type ParamsType = {
+export   type ParamsType = {
+    orderId?: number;
     symbols?: string[];
+    symbol?: string;
+    apiKey?: string;
+    signature?: string;
+    timestamp?: number;
+    recvWindow?: number;
+    cancelRestrictions?: string
     // add other possible fields here
   };
   
@@ -28,10 +38,13 @@ interface RateLimitInfo {
     code: number;
     msg: string;
 } 
-export function generateRandomId() {
-     return uuid.v4();
+export  function  generateRandomId() {
+     let randomId = uuidv4();
+     return randomId;
 } 
-export function setupWebSocket(url: string, requestId: string, method: string, params: ParamsType) {
+export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export function setupWebSocket(url: string, requestId: string, method: string, params: ParamsType,  eventEmitter: EventEmitter) {
   // Initialize WebSocket
   const ws = new WebSocket(url);
 
@@ -65,9 +78,9 @@ export function setupWebSocket(url: string, requestId: string, method: string, p
 
     let parsedMessage;
     try {
-      parsedMessage = JSON.parse(message);
+    parsedMessage = JSON.parse(message);
     console.log(`Received message from setupwebsocket snippet in utils, url ${url}`, parsedMessage);
-      return parsedMessage;
+    eventEmitter.emit('message', parsedMessage);
     } catch (e) {
       console.error('Error parsing message:', e);
       return;
@@ -77,8 +90,9 @@ export function setupWebSocket(url: string, requestId: string, method: string, p
   });
 
   // Event handler for errors
-  ws.addEventListener('error', (error) => {
-    console.log(`WebSocket Error: ${error}`);
+  ws.addEventListener('error', (event) => {
+    console.log(`WebSocket Error: ${JSON.stringify(event)}`);
+    eventEmitter.emit('error', event);
     // Handle errors here
   });
 
@@ -88,21 +102,27 @@ export function setupWebSocket(url: string, requestId: string, method: string, p
     // Handle different closure codes (these are just examples)
     switch(event.code) {
       case 1000:  // Normal Closure
+        eventEmitter.emit('close', event.code, event.reason);
         console.log("Connection closed normally.");
         break;
       case 1001:  // Going Away
+        eventEmitter.emit('close', event.code, event.reason);
         console.log("The server or client is going away.");
         break;
       case 1002:  // Protocol Error
+        eventEmitter.emit('close', event.code, event.reason);
         console.log("There was a protocol error.");
         break;
       case 1003:  // Unsupported Data
+        eventEmitter.emit('close', event.code, event.reason);
         console.log("Received data of unsupported type.");
         break;
       case 1005:  // No Status Received
+      eventEmitter.emit('close', event.code, event.reason);
         console.log("Expected close status, received none.");
         break;
       case 1006:  // Abnormal Closure
+      eventEmitter.emit('close', event.code, event.reason);
         console.log("Abnormal closure, no further detail available.");
       // Add more cases as needed
       default:
@@ -119,12 +139,6 @@ export function setupWebSocket(url: string, requestId: string, method: string, p
   return ws;
 }
 
-
-export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-
-
-
 export class WebsocketManager {
     private socket: WebSocket | null = null
     private baseUrl: string 
@@ -134,6 +148,9 @@ export class WebsocketManager {
     private method: string;
     private params: ParamsType ;
     private pingInterval: NodeJS.Timeout | null = null;
+    private maxReconnectAttempts: number = 5; // Maximum number of reconnection attempts
+    private reconnectAttempts: number = 0; // Current number of reconnection attempts
+
 
     
 
@@ -142,9 +159,10 @@ export class WebsocketManager {
         this.requestId = requestId;
         this.method = method;
         this.params = params;
-        this.socket = setupWebSocket(this.baseUrl, this.requestId, this.method, this.params);
         this.eventEmitter = new EventEmitter();
-        
+        this.socket = setupWebSocket(this.baseUrl, this.requestId, this.method, this.params,this.eventEmitter);
+        this.eventEmitter.on('close', this.onClose.bind(this));
+        this.eventEmitter.on('error', this.onError.bind(this));
      }
      private setupWebSocket() {
       return new WebSocket(this.baseUrl);
@@ -156,6 +174,7 @@ export class WebsocketManager {
        
       if (handlers.onOpen) {
         this.socket.addEventListener('open', handlers.onOpen);
+        
         this.startPing()
       }
   
@@ -178,7 +197,17 @@ export class WebsocketManager {
       // Send a ping frame every 30 seconds
       this.pingInterval = setInterval(() => {
         if ( this.socket!.readyState === WebSocket.OPEN) {
-          this.socket!.ping(); // This sends a ping frame
+
+          try {
+            this.socket!.ping();
+            this.sendMessage(JSON.stringify({
+              id: this.requestId,
+              method: "ping"
+            }));
+          } catch (error) {
+            console.error("Error sending ping:", error);
+          }
+           // This sends a ping frame
         }
       }, 30000);
   
@@ -209,13 +238,27 @@ export class WebsocketManager {
      private onMessage(message: string | Buffer) {
       try {
         const parsedMessage = JSON.parse(message.toString()) as BinanceMessage;
-      console.log('Received message: from websocket manager ', parsedMessage);
-        this.eventEmitter.emit('message', parsedMessage);   
+        if ('method' in parsedMessage && parsedMessage.method === "pong") {
+          console.log('Received pong from server');
+          
+        } else {
+
+          console.log('Received message: from websocket manager ', parsedMessage);
+          this.eventEmitter.emit('message', parsedMessage);   
+        }
       } catch (error) {
         console.error('Error parsing message:', error);
         this.eventEmitter.emit('error', error);
       }
     }
+    public forwardMessageToClient(wsClient: WebSocket) {
+      this.on('message', (data: string | Buffer) => {
+        if (wsClient.readyState === WebSocket.OPEN) {
+          wsClient.send(data);
+        }
+      });
+    }
+    
     
 
     private onError(event: Event ) {
@@ -227,20 +270,50 @@ export class WebsocketManager {
       
       
         // Attempt to reconnect after a delay
-      
+        private attachEventListeners(handlers: { onOpen?: () => void, onMessage?: (message: string | Buffer) => void, onError?: (error: any) => void, onClose?: (event: CloseEvent) => void }) {
+          if (this.socket) {
+            if (handlers.onOpen) {
+              this.socket.addEventListener('open', handlers.onOpen);
+            }
+            if (handlers.onMessage) {
+              this.socket.addEventListener('message', (event) => {
+                handlers.onMessage!(event.data as string | Buffer);
+              });
+            }
+            if (handlers.onError) {
+              this.socket.addEventListener('error', handlers.onError);
+            }
+            if (handlers.onClose) {
+              this.socket.addEventListener('close', handlers.onClose as any);
+            }
+          }
+        }
       private onClose(event: CloseEvent) {
         console.log('WebSocket closed:', event);
       
         // Check if the closure was intentional or due to an error
         if (!event.wasClean) {
-          console.log('Connection died, Attempting to reconnect...');
-          setTimeout(() => {
-            this.socket = setupWebSocket(this.baseUrl, this.requestId,this.method,this.params);
-          }, this.reconnectDelay);
-          console.log('Connection closed cleanly');
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            console.log('Connection died, Attempting to reconnect...');
+            setTimeout(() => {
+              this.reconnect();
+            }, this.reconnectDelay);
+          } else {
+            console.log('Max reconnection attempts reached.');
+          }
+        } else {
+          console.log('Connection closed cleanly.');
         }
+      }
           
           // Attempt to reconnect after a delay
+        
+      private reconnect() {
+        this.reconnectAttempts++;
+        console.log(`Reconnection attempt ${this.reconnectAttempts} of ${this.maxReconnectAttempts}`);
+        this.socket = setupWebSocket(this.baseUrl, this.requestId, this.method, this.params, this.eventEmitter);
+        // Reset the ping interval if needed
+        this.startPing();
       }
       
       public readyState() {
@@ -282,24 +355,102 @@ export class WebsocketManager {
 
 }
 
-class StreamManager {
-  private websocketManager: WebsocketManager;
+export class BinanceStreamManager {
+  private ws: WebSocket;
   private subscriptions: { [key: string]: Function[] } = {};
+  private subscriptionQueue: any[] = [];
+  private eventEmitter: EventEmitter;
 
-  constructor(websocketManager: WebsocketManager) {
-    this.websocketManager = websocketManager;
-  }
+  constructor(baseEndpoint: string) {
+    this.ws = new WebSocket(baseEndpoint);
+    this.eventEmitter = new EventEmitter();
+    this.ws.on('open', () => {
+      console.log('WebSocket connection established.');
+      this.processSubscriptionQueue();
+    });
 
-  public subscribe(topic: string, callback: WebsocketCallback) {
-    if (!this.subscriptions[topic]) {
-      this.subscriptions[topic] = [];
+    this.ws.on('message', (message: Buffer | string) => {
+      const messageStr = message.toString('utf8'); // Convert buffer to string
+     // console.log("Received message as string:", typeof(messageStr));
+      
+     try {
+      const parsedMessage: any = JSON.parse(messageStr);
+      if ('e' in parsedMessage && 'E' in parsedMessage && 's' in parsedMessage && 'k' in parsedMessage) {
+        const stream: string = parsedMessage.s;
+        if (this.subscriptions[stream]) {
+          this.subscriptions[stream]!.forEach(callback => callback(parsedMessage));
+        }
+        this.eventEmitter.emit('message', parsedMessage);
+      } else {
+        if ('code' in parsedMessage) {
+          const binanceError = BinanceError.fromCode(parsedMessage.code);
+          this.eventEmitter.emit('error', binanceError);
+        } else {
+          this.eventEmitter.emit('error', new Error("Unexpected message format"));
+        }
+      }
+    } catch (error) {
+      this.eventEmitter.emit('error', error);
     }
-    this.subscriptions[topic]!.push(callback);
-  }
+  });
 
-  // Other stream-specific methods
+  this.ws.on('error', (error) => {
+    this.eventEmitter.emit('error', error);
+  });
+    
+}
+public on(event: string, listener: (...args: any[]) => void) {
+  this.eventEmitter.on(event, listener);
 }
 
+  private processSubscriptionQueue() {
+    console.log('Processing subscription queue...', this.subscriptionQueue);
+    while (this.subscriptionQueue.length > 0) {
+      const { streamType, params, id } = this.subscriptionQueue.shift();
+      this.subscribeToStream(streamType, params, id);
+    }
+  }
+
+  public subscribeToStream(streamType: string, params: string[], id: number | string) {
+    if (this.ws.readyState !== WebSocket.OPEN) {
+      console.log('WebSocket is not open. Queuing subscription.');
+      this.subscriptionQueue.push({ streamType, params, id });
+      return;
+    }
+
+    const payload = JSON.stringify({
+      method: 'SUBSCRIBE',
+      params: params.map(param => `${param}@${streamType}`),
+      id: id,
+    });
+
+    this.ws.send(payload);
+  }
+  
+
+  public unsubscribeFromStream(params: string[], id: number | string) {
+    const payload = JSON.stringify({
+      method: 'UNSUBSCRIBE',
+      params,
+      id,
+    });
+
+    this.ws.send(payload);
+  }
+
+  public addListener(stream: string, callback: Function) {
+    if (!this.subscriptions[stream]) {
+      this.subscriptions[stream] = [];
+    }
+    this.subscriptions[stream]!.push(callback);
+  }
+
+  public removeListener(stream: string, callback: Function) {
+    if (this.subscriptions[stream]) {
+      this.subscriptions[stream] = this.subscriptions[stream]!.filter(cb => cb !== callback);
+    }
+  }
+}
 
 export class RateLimitManager {
     private requestWeight: number = 0;
@@ -391,6 +542,27 @@ export class RateLimitManager {
       "-1001": "DISCONNECTED: Internal error; unable to process your request. Please try again.",
       "-1002": "UNAUTHORIZED: You are not authorized to execute this request.",
       "-1003": "TOO_MANY_REQUESTS: Too many requests queued.",
+      "-1004": "UNEXPECTED_RESP: An unexpected response was received from the message bus. Execution status unknown.",
+      "-1005": "TIMEOUT: Timeout waiting for response from backend server. Send status unknown; execution status unknown.",
+      "-1006": "UNKNOWN_ORDER_COMPOSITION: Unknown order sent.",
+      "-1007": "TOO_MANY_ORDERS: Too many new orders.",
+      "-1008": "SERVICE_SHUTTING_DOWN: This service is no longer available.",
+      "-1009": "UNSUPPORTED_OPERATION: This operation is not supported.",
+      "-1010": "INVALID_TIMESTAMP: Timestamp for this request is outside of the recvWindow.",
+      "-1011": "INVALID_SIGNATURE: Signature for this request is not valid.",
+      "-1012": "ILLEGAL_CHARS: Illegal characters found in a parameter.",
+      "-1013": "INSUFFICIENT_BALANCE: Not enough balance to execute this request.",
+      "-1014": "UNKNOWN_ORDER: Order does not exist.",
+      "-1015": "UNKNOWN_TRADING_PAIR: Unsupported trading pair for this request.",
+      "-1016": "INVALID_ORDER: Unsupported order type for this request.",
+      "-1017": "INVALID_AMOUNT: Unsupported amount.",
+      "-1018": "INVALID_PRICE: Unsupported price.",
+      "-1019": "UNKNOWN_ERROR: An unknown error occurred while processing the request.",
+      "-1020": "INVALID_PARAMETER: A mandatory parameter was not sent, was empty/null, or malformed.",
+      "-1021": "NULL_PARAMETER: A parameter was sent that was null.",
+      "-1022": "ALREADY_EXISTS: An attempt to insert an item that already exists was made.",
+      "-1023": "INVALID_DATA: An invalid data value was sent and could not be processed.",
+      "-1024": "NOT_FOUND: Requested resource was not found.",
       // ... (add all other error codes and messages here)
       "-1100": "ILLEGAL_CHARS: Illegal characters found in a parameter.",
       "-1101": "TOO_MANY_PARAMETERS: Too many parameters sent for this endpoint.",

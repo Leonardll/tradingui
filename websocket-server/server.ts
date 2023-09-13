@@ -14,9 +14,16 @@ dotenv.config({path: '.env.local'});
 const app  = express();
 app.use(express.json());
 app.use(cors());
-const port = process.env.PORT || 4000;
-const server = http.createServer(app);
-// const wss = new Server({ server });
+const httpPort = process.env.PORT || 4000;
+const httpServer = http.createServer(app);
+const wsPort = process.env.PORT || 4001;
+
+
+const wsServer = http.createServer();
+  setupWebSocketServer(wsServer);
+  wsServer.listen(wsPort, () => {
+    console.log(`Websocket Server is running on port ${wsPort}`);
+  });
 
 interface ClientData {
   symbol: string;
@@ -24,6 +31,11 @@ interface ClientData {
 }
 
 
+
+app.use((req, res, next) => {
+  res.setHeader("Content-Security-Policy", "connect-src ws://localhost:4001 http://localhost:4000;");
+  next();
+});
 
 
 
@@ -58,11 +70,9 @@ async function initializeApplication() {
 
     await connectToMongoDB()
     console.log('MongoDB connected');
- 
-    setupWebSocketServer(server);
     
-    server.listen(port, () => {
-      console.log(`Server is running on port ${port}`);
+    httpServer.listen(httpPort, () => {
+      console.log(`Server is running on port ${httpPort}`);
     });
   }
   catch (error) {

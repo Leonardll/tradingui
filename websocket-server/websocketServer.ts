@@ -1,22 +1,26 @@
 import { Request } from 'express';
 import {Server, WebSocket } from 'ws';
-import http, { get } from 'http';
-import { openTradeStream, getDataStreamListenKey, cancelOrder, getOrderStatusFromBinance, getPricefeedStreamForSymbol, checkConnection } from './services/binanceService';
+import http, { get, request } from 'http';
+import {  getDataStreamListenKey, cancelOrder, /* getOrderStatusFromBinance */ } from './services/binanceService';
 import { eventEmitter } from './events/eventEmitter';
-import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { AllTrades} from './models/orderModels';
+import { sleep, setupWebSocket, WebsocketManager , HandleApiErrors, BinanceStreamManager} from './utils/utils';
 import dotenv from 'dotenv';
 dotenv.config({path: '.env.local'});
 import url from 'url';
-
-
+import { set } from 'mongoose';
+import crypto from 'crypto';
+import { ParamsType } from './utils/utils';
+import { generateRandomId } from './utils/utils';
 let isUpdating = false;
 const wsTestURL = process.env.BINANCE_TEST_WEBSOCKET_API_URL;
 const streamUrl = process.env.BINANCE_TEST_WEBSOCKET_STREAM_URL;
 const  testApiKey = process.env.BINANCE_TEST_API_KEY;
 const  testApiSecret = process.env.BINANCE_TEST_API_SECRET_KEY;
 let exchangeInfo: ExchangeInfoData | null = null;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;
 
 
 let ordersForSymbol: any = {};
@@ -39,7 +43,7 @@ interface Data {
   l: string;
   s: string;
   id?: string; // Add this line
-  result?: Order[]; 
+  result?: Order[];
 }
 
 interface RateLimit {
@@ -171,353 +175,364 @@ interface PriceFeedMessage {
 
 }
 
-async function updateOrderInDatabase(orderData: ExecutionReportData) {
-  // console.log('Updating order in database:', orderData.i)
-
-  try {
-  
-
-     const count =  AllTrades.countDocuments({});
-      console.log(`Total orders: ${count}`);
-    }
-  
-  catch (error) {
-    console.error('Error running test query:', error);
-  }
-
-  try {
-    const updatedOrder = await AllTrades.findOneAndUpdate(
-      { orderId: orderData.i }, // find a document with this orderId
-      {
-        status: 'FILLED',
-        // ... any other fields you want to update
-      },
-      { new: true, 
-        maxTimeMS: 2000,
-      } // return the new updated document
-    );
-    console.log('updatedOrder:', updatedOrder);
-
-    if (updatedOrder) {
-      console.log('Successfully updated order in database:', updatedOrder);
-    } else {
-      console.log('Order not found in database:', orderData.i);
-    }
-  } catch (error) {
-    console.error('Error updating order in database:', error);
-  }
+interface BinanceWebSocketError {
+  code?: number;
+  msg?: string;
 }
+
+
+
+async function updateOrderInDatabase(orderData: ExecutionReportData) {
+  let retries = 0;
+
+  while (retries < MAX_RETRIES) {
+    try {
+      const updatedOrder = await AllTrades.findOneAndUpdate(
+        { orderId: orderData.i },
+        { status: 'FILLED' },
+        { new: true, maxTimeMS: 2000 }
+      );
+
+      if (!updatedOrder) {
+        throw new Error(`Order not found in database: ${orderData.i}`);
+      }
+
+      console.log(`Successfully updated order: ${orderData.i}`);
+      return;
+    } catch (error: any) {
+      if (error.name === 'MongoTimeoutError') {
+        console.log(`Timeout error, retrying... (${retries + 1}/${MAX_RETRIES})`);
+        await sleep(RETRY_DELAY);
+        retries++;
+      } else {
+        console.error(`Failed to update order: ${orderData.i}. Error: ${error.message}`);
+        return;
+      }
+    }
+  }
+
+  console.error(`Max retries reached. Could not update order: ${orderData.i}`);
+}
+
+
 
 
 async function getAllOrdersFromMongo() {
-    return await AllTrades.find({status: "NEW"}).lean();
+    return await AllTrades.find({status: "NEW"}).lean().maxTimeMS(2000);
 }
 
- getAllOrdersFromMongo()
-.then((orders) => {
-  orders && orders.map((dbOrder) => {
-    let orderStatus = dbOrder.status
-    if (orderStatus === 'NEW') {
-
-      getOrderStatusFromBinance(dbOrder.symbol, Number(dbOrder.orderId))
-      .then( async (apiOrder) => {
-        if (apiOrder.status === 'FILLED') {
-          await AllTrades.findOneAndUpdate({orderid:apiOrder.orderId}, {status: 'FILLED'}, {new: true})
-        }
-        if (apiOrder.status === 'CANCELED') {
-          await AllTrades.findOneAndUpdate({orderId: apiOrder.orderId}, {status: 'CANCELED'}, {new: true})
-        }
-        else {
-          console.log('order status is still new', apiOrder.orderId)
-        }
-      }).catch((error) => {
-        console.error('Error comparing order status from Binance API and DB :', error)
-      })
-
-    } 
-  });
-}).catch((error) => {
-  console.error('Error finding order with status new:', error);
-});
-
-
-
-
-
-
-
-
-export async function getOrdersForSymbol(symbol: string) {
+async function fetchAllOrdersFromMongo() {
   try {
-    const upperCaseSymbol = symbol.toUpperCase();
-    // Find all orders with the given symbol
-    const orders = await AllTrades.find({ symbol: upperCaseSymbol }).lean();
-    console.log(`Getting Orders for ${upperCaseSymbol}`, orders);
+    const orders = await  getAllOrdersFromMongo();
     return orders;
-  } catch (error) {
-    console.error('Error fetching orders from MongoDB:', error);
-    throw new Error('Error fetching orders');
-  }
-}
+  } catch (error:any) {
+    if (error.name === 'MongoTimeoutError') {
+      console.error('MongoDB operation timed out. Retrying...');
+      // Implement retry logic here
 
-
-
-
-const wsExchangeInfo = new WebSocket(`${wsTestURL}`);
-export async function setupExchangeInfoStream () {
-
-  // Listen for the WebSocket connection to open
-  wsExchangeInfo.on('open', () => {
-    console.log('WebSocket connection to exchange info opened');
-    const requestId = uuidv4();
-    wsExchangeInfo.send(JSON.stringify({id: requestId, method: 'exchangeInfo', params: {} }));
-  });
-
-  
-const exchangeInfoPromise = new Promise((resolve) => {
-  wsExchangeInfo.on('message', (message:   string) => {
-  
-    try {
-      const data = JSON.parse(message) as ExchangeInfoData;
-      // console.log('data.method:', data); // New log statement
-
-      if (data.result) {
-        exchangeInfo = data;
-       // console.log('Received exchange info:', exchangeInfo);
-        console.log('Emitting exchangeInfoAvailable event'); // Check if the event is being emitted
-
-        try {
-          eventEmitter.emit('exchangeInfoAvailable', exchangeInfo);
-          console.log('Emitting exchangeInfoAvailable event'); // Check if the event is being emitted
-        } catch (error) {
-          console.error('Error emitting exchangeInfoAvailable event:', error);
-        }
-        resolve(exchangeInfo);
-      }
-     }
-    catch (error) {
-      console.log('Error parsing exchange info:', error);
+    } else {
+    console.error(`Error finding order  with status new:`, error);
     }
-  });
-});
-return exchangeInfoPromise;
-
+  }
 
 }
 
-export  function setupWebSocketServer(server: http.Server, ) {
+
+
+// fetchAllOrdersFromMongo()
+// .then((orders) => {
+//   orders && orders.map((dbOrder) => {
+//     let orderStatus = dbOrder.status
+//     if (orderStatus === 'NEW') {
+
+//       getOrderStatusFromBinance(dbOrder.symbol, Number(dbOrder.orderId))
+//       .then( async (apiOrder) => {
+
+//         if (!apiOrder) {
+//           console.log('apiOrder is null or undefined')
+//           return;
+//         }
+//         if (apiOrder.status === 'FILLED') {
+//           await AllTrades.findOneAndUpdate({orderid: apiOrder.orderId}, {status: 'FILLED'}, {new: true});
+//         } else if (apiOrder.status === 'CANCELED') {
+//           await AllTrades.findOneAndUpdate({orderid: apiOrder.orderId}, {status: 'CANCELED'}, {new: true});
+//         } else if (apiOrder.status === 'NEW') {
+//           console.log('order status is still new', apiOrder.orderId);
+//         }
+//       })
+//       .catch((error) => {
+//         console.error(`Error comparing order status ${dbOrder.orderId} from Binance API and DB:`, error);
+//       });
+//     }
+//   });
+// }).catch((error) => {
+//   if (error.name === 'MongoTimeoutError') {
+//     console.error('MongoDB operation timed out. Retrying...');
+//     // Implement retry logic here
+//   } else {
+//   console.error(`Error finding order  with status new:`, error);
+//   }
+// });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// websocketServer.ts
+
+export async function setupWebSocketServer(server: http.Server, ) {
   const wss = new Server({ server });
+  console.log('WebSocket server created');
   if (!testApiSecret) {
     throw new Error('No test API secret provided');
 
   }
-  
+  const requestId = generateRandomId();
+  const listenkey  = await getDataStreamListenKey()
+ 
 
-  // Initialize the exchange info stream
-  setupExchangeInfoStream().then((exchangeInfo) => {
-    console.log('Exchange info initialized:', exchangeInfo);
-  }).catch((error) => {
-    console.error('Error initializing exchange info:', error);
-  });
   
-  wss.on('connection', async (wsClient: WebSocket, req: Request ) => {
+  console.log('WebSocket connection to exchange opened');
+  wss.on('connection', async (wsClient: WebSocket, req) => {
+    // Log the request URL
+    console.log('Request URL:', req.url);
+  
+    // Check if the request URL is '/exchangeInfo'
+    if (req.url === '/exchangeInfo') {
+      console.log('Inside exchangeInfo condition');
     
-    if (req.url === '/userTradeStream') {
-  
-   
-
-      console.log('new client connected - userdatastream')
+      // Instantiate WebsocketManager
+      const wsExchangeInfoManager = new WebsocketManager(`${wsTestURL}`, requestId, 'exchangeInfo', {});
+      wsExchangeInfoManager.on('open', () => {
+        console.log('Connection to exchange info opened');
+      });
       
-      const listenKey = await getDataStreamListenKey();
-      const wsUserData = new WebSocket(`${streamUrl}/${listenKey}`);
-      console.log('WebSocket connection to user data stream opened');
-      let targetOrderId: string | null = null; // Store the target order ID here
-      wsUserData.on('message', async (data) => {
-        
-        console.log('Received user data:',  data.toString());
-        try {
-          const userData = JSON.parse(data.toString()) as ExecutionReportData
-          console.log('Received user data:', userData);
-          // Handle the user data here, such as updating the database or triggering other actions
-          // You can also send the data to the client if needed
-    
-          if  (userData.e === 'ORDER_TRADE_UPDATE') {
-            // Extract the order update data
-            const orderUpdateData = JSON.parse(userData.o) as Order;
-    
-            // Check if the order update data matches the target order ID
-            if (targetOrderId && orderUpdateData.orderId === targetOrderId) {
-              console.log('Received order update for target order ID:', targetOrderId, orderUpdateData);
-    
-              // Send the order update data to the client
-              wsClient.send(JSON.stringify(orderUpdateData));
-            }
+      // Setup WebSocket connection to the exchange info
+      wsExchangeInfoManager.on('message', async (data: string | Buffer) => {
+        console.log('Received message from exchange:', data);
+        // You can forward this data to the client if needed
+
+        if (wsClient.readyState === WebSocket.OPEN) {
+          console.log('wsClient is open. Sending data.', data);
+
+
+          if (typeof data === 'object') {
+            wsClient.send(JSON.stringify(data));
+          }else {
+            
+            wsClient.send(JSON.stringify(data))
           }
-        
-  
-          if (userData.X === 'FILLED') {
-            await updateOrderInDatabase(userData);
-            // Update database for order
-            // ...
-           console.log('Order filled:', userData);
-          } else if (userData.X === 'CANCELED') {
-            console.log('Order canceled:', userData);
-          } else if (userData.X === 'NEW') {
-            console.log('Order Status New:', userData);
-          }
-        } catch (error) {
-          console.error('Error parsing user data:', error);
-          return;
+          // Forward this data to the client
+        } else {
+          console.log('wsClient is not open. Cannot send data.');
         }
-      
-      }); 
-
-      
-     wsClient.on('message', async (message: Buffer) => {
-      console.log('Received message type:', typeof message);
-      console.log('Received message content:', message);
-      let data;
-      const preProcessMessage = (msg: string): string => {
-        return msg.replace(/(\w+):/g, '"$1":');
-      };
-      const messageStr = preProcessMessage(message.toString('utf-8').trim());
-      if (messageStr.startsWith('{') || messageStr.startsWith('[')) {
-
-      try {
-        data = JSON.parse(messageStr) as Order;
-        console.log('Successfully parsed message:', data); // <-- Add this log
-      } catch (error) {
-        console.error('Error parsing message:', error); // <-- Add this log
-        // const symbol = messageStr.toString();
-        return;
-      }
-    } else {
-      console.log(`Received non-JSON message from client: ${messageStr}`);
-      return;
-    }
-      console.log('Received message from client:', messageStr);
-
-      //const data = JSON.parse(message) as Order;
-      console.log('Parsed message:', data );
-      if (data.action === 'deleteOrder') {
-        // This is a request to delete an order
-        const response = await cancelOrder(data);
-        console.log('Cancel order response:', response);
-        wsClient.send(JSON.stringify(response));
-      }
-      targetOrderId = data.orderId;
-        console.log('Set target order ID:', targetOrderId);
-      if (data.action === 'setTargetOrderId') {
-        targetOrderId = data.orderId;
-        console.log('Set target order ID:', targetOrderId);
-      }
-
-    });
-      
-      
+      });
     
-    wsUserData.on('close', (code, reason) => {
-      console.log(`WebSocket connection to user data closed, code: ${code}, reason: ${reason}`);
-    });
+      wsExchangeInfoManager.on('error', (event) => {
+        console.error('Websocket error:', JSON.stringify(event));
+      });
     
-    wsUserData.on('error', (error) => {
-      console.error('Websocket error:', error);
-    });
+      wsExchangeInfoManager.on('close', (code, reason) => {
+        console.log(`WebSocket connection to exchange info closed, code: ${code}, reason: ${reason}`);
+      });
+    
+      // Test message to confirm data sending
+     // wsClient.send('Test exchangeInfo message');
+    } else if (req.url === '/userData') {
+      if (!testApiKey && !testApiSecret) {
+        throw new Error('No test API key provided');
+      }
     }
+    else if (req.url?.startsWith('/orderStatus')) {
+      console.log('Inside orderStatus condition');
+      if (!testApiKey && !testApiSecret) {
+        throw new Error('No test API key provided');
+      }
+      const parsedUrl =  new URL(req.url, `http://${req.headers.host}` ); // Parse the URL and the query parameters
+
+      const symbol = parsedUrl.searchParams.get('symbol');
+      const orderId = parsedUrl.searchParams.get('orderId');
+    
+      const timestamp = Date.now();
+      
+      if (!symbol && !orderId) {
+        throw new Error('No symbol or orderId provided');
+       } else {
+
+         const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol}&timestamp=${timestamp}`;
+         const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
+         const params: ParamsType = {
+           symbol: symbol!.toUpperCase() ,
+           orderId: Number(orderId),
+           apiKey: testApiKey,
+           signature: signature,
+           timestamp: timestamp
+         };
+         
+         const wsOrderStatusManager = new WebsocketManager(`${wsTestURL}`, requestId, 'order.status', params);
+         wsOrderStatusManager.on('open', () => {
+           console.log('Connection to order status opened')
+            
+         })
+         wsOrderStatusManager.on('message', async (data: string | Buffer) => {
+           console.log('Received order status message from exchange:', data);
+           // You can forward this data to the client if needed
    
-    if (req.url.startsWith ('/priceFeed')) {
-      console.log('Client connected to priceFeed');
-      const location = url.parse(req.url, true);
-      const symbol =location.query.symbol
-      console.log(symbol, "log from getPricefeedStreamForSymbol binanceService.ts")
+           if (wsClient.readyState === WebSocket.OPEN) {
+             console.log('wsClient is open. Sending data.', data);
+   
+   
+             if (typeof data === 'object') {
+               wsClient.send(JSON.stringify(data));
+             }else {
+               
+               wsClient.send(JSON.stringify(data))
+             }
+             // Forward this data to the client
+           } else {
+             console.log('wsClient is not open. Cannot send data.');
+           }
+         });
+         wsOrderStatusManager.on('error', (event) => {
+           console.error('Order Status Websocket error:', JSON.stringify(event));
+         });
+         wsOrderStatusManager.on('close', (code, reason) => {
+           console.log(`WebSocket connection to order status closed, code: ${code}, reason: ${reason}`);
+         })
+       } 
+    
+    }
+    else if (req.url?.startsWith('/allOrders')) {
+      console.log('Inside orderStatus condition');
+      if (!testApiKey && !testApiSecret) {
+        throw new Error('No test API key provided');
+      }
+      const parsedUrl =  new URL(req.url, `http://${req.headers.host}` ); // Parse the URL and the query parameters
+
+      const symbol = parsedUrl.searchParams.get('symbol');
+    
+      const timestamp = Date.now();
+      
       if (!symbol) {
-        console.error('Symbol parameter is missing');
+        throw new Error('No symbol or orderId provided');
+       } else {
+
+         const queryString = `apiKey=${testApiKey}&symbol=${symbol}&timestamp=${timestamp}`;
+         const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
+         const params: ParamsType = {
+           symbol: symbol!.toUpperCase() ,
+           apiKey: testApiKey,
+           signature: signature,
+           timestamp: timestamp
+         };
+         
+         const wsAllOrder4SymbolManager = new WebsocketManager(`${wsTestURL}`, requestId, 'allOrders', params);
+         wsAllOrder4SymbolManager.on('open', () => {
+           console.log('Connection to order status opened')
+            
+         })
+         wsAllOrder4SymbolManager.on('message', async (data: string | Buffer) => {
+           console.log('Received order status message from exchange:', data);
+           // You can forward this data to the client if needed
+   
+           if (wsClient.readyState === WebSocket.OPEN) {
+             console.log('wsClient is open. Sending data.', data);
+   
+   
+             if (typeof data === 'object') {
+               wsClient.send(JSON.stringify(data));
+             }else {
+               
+               wsClient.send(JSON.stringify(data))
+             }
+             // Forward this data to the client
+           } else {
+             console.log('wsClient is not open. Cannot send data.');
+           }
+         });
+         wsAllOrder4SymbolManager.on('error', (event) => {
+           console.error('Order Status Websocket error:', JSON.stringify(event));
+         });
+         wsAllOrder4SymbolManager.on('close', (code, reason) => {
+           console.log(`WebSocket connection to order status closed, code: ${code}, reason: ${reason}`);
+         })
+       } 
+
+    } else if (req.url?.startsWith('/priceFeed')) {
+      console.log('Inside priceFeed condition');
+    
+      // Parse the URL to get the symbol for which the price feed is requested
+      const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+      const symbol = parsedUrl.searchParams.get('symbol')?.toUpperCase();
+      const timeframes = parsedUrl.searchParams.get('timeframes')?.split(',') || ['1s']; // Default to 1s if not provided
+
+      let streamID = 1
+      if (!symbol) {
+        console.log('No symbol provided for price feed');
+        wsClient.send('No symbol provided for price feed');
         return;
       }
-      const listenKey = await getDataStreamListenKey();
-      const wsPriceFeed = `${streamUrl}/${listenKey}/${symbol}@kline_1s`;
-      
-      const binanceWsPriceFeed = new WebSocket(wsPriceFeed) 
-      console.log('WebSocket connection to price feed opened');
-
-      binanceWsPriceFeed.on('open', () => {
-        console.log('WebSocket connection to price feed opened');
-      })
-
-      binanceWsPriceFeed.on('message', async (message:Buffer) => {
-         const messageStr = message.toString('utf-8')
-         try {
-        const  msgJson = JSON.parse(messageStr) as PriceFeedMessage;
-        wsClient.send(JSON.stringify(msgJson)) 
-       // console.log('Received price feed message:', msgJson);
-         } catch (error) {
-           console.error('Error parsing price feed message:', error);
-           return;
-         }
-      })
-
-      binanceWsPriceFeed.on('error', (error) => {
-        console.error('Websocket Price Feed error:', error);
-      })
-
-      binanceWsPriceFeed.on('close', (code, reason) => { 
-        console.log(`WebSocket connection to price feed closed, code: ${code}, reason: ${reason}`);
-       })
-
-       
-
-      // const wsBinancePriceFeed = await getPricefeedStreamForSymbol(req.query.symbol as string)  
-      // console.log(req.query.symbol)
-      // wsBinancePriceFeed.on('message', async (priceFeedMessage) => { 
-      //   console.log('Received price feed message:', priceFeedMessage);
-      //   wsClient.send(JSON.stringify(priceFeedMessage))
-      // });
-
-      // wsBinancePriceFeed.on('error', (error) => {
-      //   console.error('Websocket Price Feed error:', error);
-      // })
-
-      // wsBinancePriceFeed.on('close', (code, reason) => {
-      //   console.log(`WebSocket connection to price feed closed, code: ${code}, reason: ${reason}`);
-      // })
-    }
-  
-
-
-
-    wsExchangeInfo.on('error', (error) => { console.error('Websocket error:', error) });
-
-    wsExchangeInfo.on('close', (code, reason) => {
-      console.log(`WebSocket connection to exchange info closed, code: ${code}, reason: ${reason}`);
-   //   // You could also try to reconnect here if you want
-    });
-
     
-
+    
+      timeframes.forEach((timeframe) => {
+        const wsPriceFeed = `${streamUrl}/${listenkey}/${symbol.toLowerCase()}@kline_${timeframe}`;
+        const binanceStreamManager = new BinanceStreamManager(wsPriceFeed);
+    
+        binanceStreamManager.addListener(`${symbol}`, (data: PriceFeedMessage) => {
+          console.log(`Received price feed data for ${timeframe}:`, data);
+    
+          if (wsClient.readyState === WebSocket.OPEN) {
+            wsClient.send(JSON.stringify(data));
+          } else {
+            console.log('wsClient is not open. Cannot send price feed data.');
+          }
+        });
+    
+        // Handle errors
+        binanceStreamManager.on('error', (error) => {
+          console.error('An error occurred:', error);
+        });
+      
+        // Handle close events
+        binanceStreamManager.addListener('close', (code:number, reason:string) => {
+          console.log(`WebSocket connection to price feed closed, code: ${code}, reason: ${reason}`);
+        });
+        // Subscribe to the kline stream for the given symbol and timeframe
+        binanceStreamManager.subscribeToStream('kline', [`${symbol.toLowerCase()}@kline_${timeframe}`], streamID);
+        streamID++;
+      });
+    
+      
+    }
+    
+  
+    wsClient.addListener('message',  async function incoming(message) {
+      wsClient.send(message);
+    });
+  
     wsClient.on('close', function close() {
       console.log('Client disconnected');
-      wsExchangeInfo.close();
-     
-      // Close any other WebSocket connections related to this client
-      // ...
     });
-
+  
     wsClient.on('error', function error(err) {
       console.log('WebSocket error:', err.message);
     });
   });
-
-};
-
-
   
 
 
 
-export async function getExchangeInfo() {
-  if (!exchangeInfo) {
-    throw new Error('Exchange info not initialized');
-  }
-  return exchangeInfo;
-}
+};
+
+
+
 

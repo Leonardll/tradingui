@@ -10,7 +10,7 @@ import{ setupWebSocket, WebsocketManager, RateLimitManager }from '../utils/utils
 import { AllTrades } from '../models/orderModels';
 dotenv.config({path: '.env.local'});
 import { set } from 'mongoose';
-
+import { generateRandomId } from '../utils/utils';
 const apiKey = process.env.API_KEY;
 const apiSecret = process.env.API_SECRET;
 const binanceTestUrl = process.env.BINANCE_TEST_URL;
@@ -362,11 +362,11 @@ const wsUserData = new WebSocket(`${wsTestURL}`)
     if (!testApiSecret) {
 throw new Error('No test API secret provided');
 }
-    const requestId = uuidv4();
+    const requestId =   generateRandomId();
     wsUserData.on('open', () => {
-      const timeStamp = Date.now();
-const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
-const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
+    const timeStamp = Date.now();
+    const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
+    const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
 
       const params = {
 symbol: symbol.toUpperCase(),
@@ -384,9 +384,10 @@ params: params,
 });
 
     wsUserData.on('message', (message: string) => {
+      console.log("message", message)
       const data = JSON.parse(message) as { id: string; result: Order };
-      // console.log('Received order status from Binance:', data);
-//  console.log('order status', data.result);
+    console.log('Received order status from Binance:', data);
+    console.log('order status', data.result);
       if (data.id === requestId) {
 resolve(data.result);
 }
