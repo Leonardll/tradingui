@@ -1,3 +1,4 @@
+import { orderSchema } from './../models/orderModels';
 
 import axios from 'axios';
 import  crypto  from 'crypto';
@@ -5,9 +6,10 @@ import http from 'http';
 import dotenv from 'dotenv';
 import {v4 as uuidv4} from 'uuid';
 import { WebSocket, Server  } from 'ws'; 
+import{ setupWebSocket, WebsocketManager, RateLimitManager }from '../utils/utils';
 import { AllTrades } from '../models/orderModels';
 dotenv.config({path: '.env.local'});
-import expressWs from 'express-ws'; // Import express-ws
+import { set } from 'mongoose';
 
 const apiKey = process.env.API_KEY;
 const apiSecret = process.env.API_SECRET;
@@ -86,13 +88,24 @@ interface PriceFeedMessage {
   n: number;
 
 }
-
+interface BinanceErrorType {
+  code: number;
+  msg: string;
+}
 
 
 let isUpdating = false;
 let ordersForSymbol: any = {};
-let reconnectAttempts = 0;
+if (!wsTestURL) {
+  throw new Error('No test WebSocket URL provided');
+}
+// const binanceWsManager = new WebsocketManager(wsTestURL);
+const rateLimitManager = new RateLimitManager();
 
+
+let reconnectAttempts = 0;
+let reconnectInterval = 1000; // 1 second
+let maxReconnectInterval = 30000; // 30 seconds
 
 interface ExecutionReportData {
   e: string;  // Event type
@@ -172,27 +185,27 @@ export async function cancelOrder(order : Order) {
   }
 }
 export async function checkConnection(): Promise<BinanceConnectionCheck> {
-  return new Promise(async (resolve, reject) => {
-    const wsServerConnection = new WebSocket(`${wsTestURL}`);
+return new Promise(async (resolve, reject) => {
+const wsServerConnection = new WebSocket(`${wsTestURL}`);
     console.log("wsServerConnection", wsServerConnection.readyState)
     const requestId = uuidv4();
 
-    wsServerConnection.on('open', () => {
-      console.log("websocket connection test open");
-      const message = { id: requestId, method: 'ping', params: {} };
-      wsServerConnection.send(JSON.stringify(message));
-    });
+wsServerConnection.on('open', () => {
+console.log("websocket connection test open");
+const message = { id: requestId, method: 'ping', params: {} };
+wsServerConnection.send(JSON.stringify(message));
+});
 
     wsServerConnection.on('message', (message: string) => {
       try {
         const data = JSON.parse(message) as BinanceConnectionCheck;
-        if (data.status === 200) {
-          wsServerConnection.close(); // Close if you don't need the connection anymore
+if (data.status === 200) {
+wsServerConnection.close(); // Close if you don't need the connection anymore
           resolve(data);
-        }
+}
       } catch (error) {
-        console.log('Error parsing connection check:', error);
-        reject(error);
+console.log('Error parsing connection check:', error);
+reject(error);
       }
     });
 
@@ -206,11 +219,11 @@ export async function checkConnection(): Promise<BinanceConnectionCheck> {
     });
 
     // Timeout to reject the promise if no response is received within 10 seconds
-    setTimeout(() => {
-      wsServerConnection.close(); // Close the WebSocket connection
+setTimeout(() => {
+wsServerConnection.close(); // Close the WebSocket connection
       reject(new Error('Request timed out'));
-    }, 10000);
-  });
+}, 10000);
+});
 }
 
 export async function openTradeStream(symbol: string, orderId: string): Promise<WebSocket> {
@@ -281,42 +294,42 @@ export async function openTradeStream(symbol: string, orderId: string): Promise<
 
 
 export async function getAllOrdersFromBinance(symbol: string, orderId? : number): Promise<Order[]> {
-  return new Promise( async (resolve, reject) => {
-    
+return new Promise( async (resolve, reject) => {
+
     try {
-      const connectionTest = await checkConnection();
-      const wsUserData = new WebSocket(`${wsTestURL}`);
+const connectionTest = await checkConnection();
+const wsUserData = new WebSocket(`${wsTestURL}`);
       if (!testApiSecret) {
-        throw new Error('No test API secret provided');
-      }
+throw new Error('No test API secret provided');
+}
       const requestId = uuidv4();
-      wsUserData.on('open', () => {
-        const timeStamp = Date.now();
-        const queryString = `apiKey=${testApiKey}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
-        const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
-  
+wsUserData.on('open', () => {
+const timeStamp = Date.now();
+const queryString = `apiKey=${testApiKey}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
+const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
+
         const params = {
-          symbol: symbol.toUpperCase(),
-          timestamp: timeStamp,
-          apiKey: testApiKey,
-          signature: signature,
-         
+symbol: symbol.toUpperCase(),
+timestamp: timeStamp,
+apiKey: testApiKey,
+signature: signature,
+
         }
         const message = {
-          id: requestId,
-          method: "allOrders",
-          params: params,
-        } 
-        // console.log("message", message)
+id: requestId,
+method: "allOrders",
+params: params,
+}
+// console.log("message", message)
         wsUserData.send(JSON.stringify(message));
-      });
+});
   
       wsUserData.on('message', (message: string) => {
         const data = JSON.parse(message) as BinanceResponse;
         console.log(`Received all orders  for ${symbol} from  binance:`, data.result.length);
         if (data.id === requestId) {
-          resolve(data.result);
-        }
+resolve(data.result);
+}
       });
       wsUserData.onerror = (event) => {
         console.error('WebSocket Error:', event);
@@ -337,57 +350,57 @@ export async function getAllOrdersFromBinance(symbol: string, orderId? : number)
       });
     } catch (error) {
       console.error('Error getting orders:', error);
-      reject(error);
+reject(error);
     }
  
   });
 } 
 export async function getOrderStatusFromBinance(symbol: string, orderId: number): Promise<Order> {
-  return new Promise(async (resolve, reject) => {
-    const listenKey = await getDataStreamListenKey();
-    const wsUserData = new WebSocket(`${wsTestURL}`)
+return new Promise(async (resolve, reject) => {
+const listenKey = await getDataStreamListenKey();
+const wsUserData = new WebSocket(`${wsTestURL}`)
     if (!testApiSecret) {
-      throw new Error('No test API secret provided');
-    }
+throw new Error('No test API secret provided');
+}
     const requestId = uuidv4();
     wsUserData.on('open', () => {
       const timeStamp = Date.now();
-      const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
-      const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
-     
+const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
+const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
+
       const params = {
-        symbol: symbol.toUpperCase(),
-        orderId: orderId,
-        apiKey: testApiKey,
-        signature: signature,
-        timestamp: timeStamp,
-      }
+symbol: symbol.toUpperCase(),
+orderId: orderId,
+apiKey: testApiKey,
+signature: signature,
+timestamp: timeStamp,
+}
       const message = {
-        id: requestId,
-        method: "order.status",
-        params: params,
-      }
+id: requestId,
+method: "order.status",
+params: params,
+}
       wsUserData.send(JSON.stringify(message));
-    });
+});
 
     wsUserData.on('message', (message: string) => {
       const data = JSON.parse(message) as { id: string; result: Order };
       // console.log('Received order status from Binance:', data);
-      //  console.log('order status', data.result);
+//  console.log('order status', data.result);
       if (data.id === requestId) {
-        resolve(data.result);
-      }
+resolve(data.result);
+}
     });
 
-    wsUserData.on('error', (error) => {
+wsUserData.on('error', (error) => {
       reject(error);
-    });
+});
 
-     // Timeout to reject the promise if no response is received within 10 seconds
+// Timeout to reject the promise if no response is received within 10 seconds
      setTimeout(() => {
       wsUserData.close(); // Close the WebSocket connection
       reject(new Error('Request timed out'));
-    }, 10000);
+}, 10000);
   });
 }
 async function updateOrdersForSymbol(symbol: string, newOrders: Order[]) {
@@ -452,23 +465,23 @@ export async function handleUserDataMessage(
 }
 
 export async function getPricefeedStreamForSymbol (symbol: string):Promise<WebSocket> {
-  const listenKey = await getDataStreamListenKey();
-  console.log(symbol, "log from getPricefeedStreamForSymbol binanceService.ts")
-  const wsPriceFeed = `${wsTestURL}/${listenKey}/${symbol.toLowerCase()}@kline_1s`;
-  const binanceWsPriceFeed = new WebSocket(wsPriceFeed) 
+const listenKey = await getDataStreamListenKey();
+console.log(symbol, "log from getPricefeedStreamForSymbol binanceService.ts")
+const wsPriceFeed = `${wsTestURL}/${listenKey}/${symbol.toLowerCase()}@kline_1s`;
+const binanceWsPriceFeed = new WebSocket(wsPriceFeed) 
   binanceWsPriceFeed.on('open', () => {
-    console.log(`Connected to Binance for symbol: ${symbol}`);
-    reconnectAttempts = 0; // Reset reconnection attempts on successful connection
+console.log(`Connected to Binance for symbol: ${symbol}`);
+reconnectAttempts = 0; // Reset reconnection attempts on successful connection
 
   }); 
 
   binanceWsPriceFeed.on('message', (message: string) => {
     console.log('Received price feed message from Binance:', message);
-  })
+})
 
   binanceWsPriceFeed.on('error', (error) => {
     console.log(`WebSocket Price Feed Error for symbol ${symbol}:`, error);
-  });
+    });
 
   return binanceWsPriceFeed 
   
