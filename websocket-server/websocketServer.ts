@@ -5,7 +5,7 @@ import {  getDataStreamListenKey, cancelOrder, /* getOrderStatusFromBinance */ }
 import { eventEmitter } from './events/eventEmitter';
 import { v4 as uuidv4 } from 'uuid';
 import { AllTrades} from './models/orderModels';
-import { sleep, setupWebSocket, WebsocketManager , HandleApiErrors, BinanceStreamManager} from './utils/utils';
+import { sleep, setupWebSocket, WebsocketManager ,generateDate, HandleApiErrors,generateBinanceSignature, BinanceStreamManager} from './utils/utils';
 import dotenv from 'dotenv';
 dotenv.config({path: '.env.local'});
 import url from 'url';
@@ -25,7 +25,12 @@ const RETRY_DELAY = 2000;
 
 let ordersForSymbol: any = {};
 
-
+type Asset = string;
+type EventTime = number;
+type OrderId = number;
+type ClientOrderId = string;
+type Symbol = string;
+type Balance = number;
 
 interface Order {
   symbol: string;
@@ -65,6 +70,14 @@ interface ExchangeInfoData {
     symbols: SymbolInfo[];
   };
   rateLimits: RateLimit[];
+}
+
+interface BalanceUpdateData {
+  e: "balanceUpdate";
+  E: EventTime;
+  a: Asset;
+  d: string;
+  T: EventTime;
 }
 
 interface SymbolInfo {
@@ -108,11 +121,11 @@ interface BinanceResponse {
 
 interface ExecutionReportData {
   e: string;
-  E: number;
-  s: string;
-  c: string;
-  S: string;
-  o: string;
+  E:EventTime;
+  s: Symbol;
+  c: ClientOrderId;
+  S: "BUY" | "SELL";
+  o: "LIMIT" | "MARKET" | "STOP_LOSS" | "STOP_LOSS_LIMIT" | "TAKE_PROFIT" | "TAKE_PROFIT_LIMIT" | "LIMIT_MAKER";
   f: string;
   q: string;
   p: string;
@@ -120,10 +133,10 @@ interface ExecutionReportData {
   F: string;
   g: number;
   C: string;
-  x: string;
+  x: "NEW" | "PARTIALLY_FILLED" | "FILLED" | "CANCELED" | "PENDING_CANCEL" | "REJECTED" | "EXPIRED";
   X: string;
   r: string;
-  i: number;
+  i: OrderId;
   l: string;
   z: string;
   L: string;
@@ -147,6 +160,36 @@ type ClientTradeData = {
   orderId: string;
 };
 
+interface ListStatusData {
+  e: "listStatus";
+  E: EventTime;
+  s: Symbol;
+  g: number; // OrderListId
+  c: string; // Contingency Type
+  l: string; // List Status Type
+  L: string; // List Order Status
+  r: string; // List Reject Reason
+  C: string; // List Client Order Id
+  T: EventTime; // Transaction Time
+  O: Array<{
+    s: Symbol;
+    i: OrderId;
+    c: ClientOrderId;
+  }>;
+}
+
+
+
+interface OutboundAccountPositionData {
+  e: "outboundAccountPosition";
+  E: EventTime;
+  u: EventTime;
+  B: Array<{
+    a: Asset;
+    f: Balance;
+    l: Balance;
+  }>;
+}
 interface PriceFeedMessage {
 
   e: string;
@@ -236,7 +279,104 @@ async function fetchAllOrdersFromMongo() {
   }
 
 }
+function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
+  console.log('Account Position Update:', data);
+  
+  // Extract relevant information
+  const eventTime = data.E;
+  const lastAccountUpdate = data.u;
+  const balances = data.B;
 
+  // Validate the data
+  if (!Array.isArray(balances)) {
+    console.error('Invalid balance data:', balances);
+    return;
+  }
+
+  // Process each balance
+  balances.forEach((balance: any) => {
+    const asset = balance.a;
+    const free = parseFloat(balance.f);
+    const locked = parseFloat(balance.l);
+
+    if (isNaN(free) || isNaN(locked)) {
+      console.error('Invalid balance values:', balance);
+      return;
+    }
+
+    // Your logic here, e.g., update database, trigger alerts, etc.
+  });
+}
+
+// Function to handle 'balanceUpdate' event
+function handleBalanceUpdate(data: BalanceUpdateData ) {
+  console.log('Balance Update:', data);
+
+  // Extract relevant information
+  const eventTime = data.E;
+  const asset = data.a;
+  const balanceDelta = parseFloat(data.d);
+  const clearTime = data.T;
+
+  if (isNaN(balanceDelta)) {
+    console.error('Invalid balance delta:', data.d);
+    return;
+  }
+
+  // Your logic here, e.g., update database, trigger alerts, etc.
+}
+
+// Function to handle 'executionReport' event
+function handleExecutionReport(data: ExecutionReportData) {
+  console.log('Order Update:', data);
+
+  // Extract relevant information
+  const eventTime = data.E;
+  const symbol = data.s;
+  const clientOrderId = data.c;
+  const side = data.S;
+  const orderType = data.o;
+  const orderStatus = data.X;
+  const orderRejectReason = data.r;
+  const orderId = data.i;
+
+  // Your logic here, e.g., update database, trigger alerts, etc.
+  if (orderStatus === 'NEW') {
+    // Handle new orders
+  } else if (orderStatus === 'CANCELED') {
+    // Handle canceled orders
+  } else if (orderStatus === 'REJECTED') {
+    // Handle rejected orders
+  } else if (orderStatus === 'TRADE') {
+    // Handle trades
+  } else if (orderStatus === 'EXPIRED') {
+    // Handle expired orders
+  } else {
+    console.error('Unknown order status:', orderStatus);
+  }
+}
+// Function to handle 'listStatus' event (for OCO orders)
+function handleListStatus(data: ListStatusData) {
+  console.log('List Status:', data);
+
+  // Extract relevant information
+  const eventTime = data.E;
+  const symbol = data.s;
+  const orderListId = data.g;
+  const contingencyType = data.c;
+  const listStatusType = data.l;
+  const listOrderStatus = data.L;
+  const listRejectReason = data.r;
+
+  // Your logic here, e.g., update database, trigger alerts, etc.
+  if (listOrderStatus === 'EXECUTING') {
+    // Handle executing lists
+  } else if (listOrderStatus === 'ALL_DONE') {
+    // Handle completed lists
+  } else {
+    console.error('Unknown list order status:', listOrderStatus);
+  }
+}
 
 
 // fetchAllOrdersFromMongo()
@@ -298,7 +438,7 @@ export async function setupWebSocketServer(server: http.Server, ) {
   }
   const requestId = generateRandomId();
   const listenkey  = await getDataStreamListenKey()
- 
+  console.log('listenkey', listenkey);
 
   
   console.log('WebSocket connection to exchange opened');
@@ -347,10 +487,111 @@ export async function setupWebSocketServer(server: http.Server, ) {
     
       // Test message to confirm data sending
      // wsClient.send('Test exchangeInfo message');
-    } else if (req.url === '/userData') {
-      if (!testApiKey && !testApiSecret) {
-        throw new Error('No test API key provided');
+    }else if (req.url?.startsWith('/userDataReport')) {
+      if (!testApiKey || !testApiSecret) {
+        console.error('No test API key or secret provided');
+        wsClient.send('No test API key or secret provided');
+        return;
       }
+    
+      // Generate listenKey using your API (this part depends on how you've set up API calls)
+      const listenKey = await getDataStreamListenKey();
+    
+      if (!listenKey) {
+        console.error('Failed to generate listenKey');
+        wsClient.send('Failed to generate listenKey');
+        return;
+      }
+    
+      // Create WebSocket URL for user data stream
+      const wsUserDataUrl = `${wsTestURL}/${listenKey}`;
+    
+      // Create a new BinanceStreamManager for the user data stream
+      const binanceStreamManager = new BinanceStreamManager(wsUserDataUrl);
+      console.log('connection  to user data stream opened');
+      // Add a listener to handle incoming user data
+      binanceStreamManager.on('message', (data: any) => {
+        const eventType = data.e;  // Event type
+        
+        switch(eventType) {
+          case 'outboundAccountPosition':
+            handleOutboundAccountPosition(data);
+            break;
+          case 'balanceUpdate':
+            handleBalanceUpdate(data);
+            break;
+          case 'executionReport':
+            handleExecutionReport(data);
+            break;
+          case 'listStatus':
+            handleListStatus(data);
+            break;
+          default:
+            console.log('Unknown event type:', eventType);
+        }
+      
+        if (wsClient.readyState === WebSocket.OPEN) {
+          wsClient.send(JSON.stringify(data));
+        } else {
+          console.log('wsClient is not open. Cannot send user data.');
+        }
+      });
+      
+      // Function to handle 'outboundAccountPosition' event
+ 
+    
+      // Handle errors
+      binanceStreamManager.on('error', (error: any) => {
+        console.error('User Data Websocket error:', JSON.stringify(error));
+      });
+    
+      // Handle close events
+      binanceStreamManager.on('close', (code: number, reason: string) => {
+        console.log(`WebSocket connection to user data closed, code: ${code}, reason: ${reason}`);
+      });
+    }
+    else if (req.url?.startsWith('/userInfo')) {
+      if (!testApiKey || !testApiSecret) {
+        console.error('No test API key or secret provided');
+        wsClient.send('No test API key or secret provided');
+        return;
+      }
+      const timestamp = generateDate();
+      const queryString = `apiKey=${testApiKey}&timestamp=${timestamp}`;
+      const signature = generateBinanceSignature(queryString, testApiSecret);
+      const params: ParamsType = {
+        apiKey: testApiKey,
+        signature: signature,
+        timestamp: timestamp
+      };
+      const wsUserInfoManager = new WebsocketManager(`${wsTestURL}`, requestId, 'account.status', params);
+      wsUserInfoManager.on('open', () => {
+        console.log('Connection to user info opened');
+
+      });
+      wsUserInfoManager.on('message', async (data: string | Buffer) => {
+        console.log('Received user info message from exchange:', data);
+        if (wsClient.readyState === WebSocket.OPEN) {
+          console.log('wsClient is open. Sending data.', data);
+
+
+          if (typeof data === 'object') {
+            wsClient.send(JSON.stringify(data));
+          }else {
+            
+            wsClient.send(JSON.stringify(data))
+          }
+          // Forward this data to the client
+        } else {
+          console.log('wsClient is not open. Cannot send data.');
+        }
+      });
+      wsUserInfoManager.on('error', (error:any) => {
+        console.error('User Info Websocket error:', JSON.stringify(error));
+      });
+      wsUserInfoManager.on('close', (code:number, reason:string) => {
+        console.log(`WebSocket connection to user info closed, code: ${code}, reason: ${reason}`);
+      });
     }
     else if (req.url?.startsWith('/orderStatus')) {
       console.log('Inside orderStatus condition');
@@ -362,7 +603,7 @@ export async function setupWebSocketServer(server: http.Server, ) {
       const symbol = parsedUrl.searchParams.get('symbol');
       const orderId = parsedUrl.searchParams.get('orderId');
     
-      const timestamp = Date.now();
+      const timestamp = generateDate();
       
       if (!symbol && !orderId) {
         throw new Error('No symbol or orderId provided');

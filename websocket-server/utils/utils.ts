@@ -4,7 +4,7 @@ import { WebSocket } from 'ws';
 import { v4 as uuidv4} from 'uuid';
 import { EventEmitter } from 'events';
 import { CombinedStreamPayload, StreamType, StreamPayload } from './streamTypes';
-
+import crypto from 'crypto';
 
 export type StreamCallback = (data: StreamPayload) => void;
 
@@ -38,6 +38,22 @@ export   type ParamsType = {
     code: number;
     msg: string;
 } 
+export function generateDate () {
+  let currDate = Date.now();
+  return currDate;
+}
+ /**
+* Create a Binance API signature.
+* @param queryString - The query string to be signed.
+* @param apiSecret - The API secret key.
+* @returns The generated signature.
+*/
+export function generateBinanceSignature(queryString: string, apiSecret: string): string {
+ return crypto
+   .createHmac('sha256', apiSecret)
+   .update(queryString)
+   .digest('hex');
+}
 export  function  generateRandomId() {
      let randomId = uuidv4();
      return randomId;
