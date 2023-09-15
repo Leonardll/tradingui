@@ -56,8 +56,10 @@ export interface IFill {
     fills: [fillSchema],
 
 });
-orderSchema.index({ symbol: 1, status: 1 });
+orderSchema.index({ orderId: 1,symbol: 1, status: 1 });
 
+const isTestEnv = process.env.NODE_ENV === 'test';
+const collectionPrefix = isTestEnv ? 'test_' : 'real_';
 
+export const OrderModel = mongoose.model<IOrder>(`${collectionPrefix}Orders`, orderSchema);
 
-export const AllTrades = mongoose.model<IOrder>('Orders', orderSchema);

@@ -135,7 +135,6 @@ interface ListStatusData {
   }
 
 // exchange data 
-
   export function exchangeInfoWebsocket(wsClient: WebSocket, wsTestURL: string, requestId: string): void {
     const wsExchangeInfoManager = new WebsocketManager(wsTestURL, requestId, 'exchangeInfo', {});
   
@@ -232,7 +231,7 @@ export async function userDataReportWebsocket (wsClient: WebSocket,testApiKey:st
       });
 }
 
-// account request 
+// user account info
 export async function userInfoWebsocket(wsClient:WebSocket,wsTestURL:string,requestId:string,testApiSecret:string, testApiKey:string){
     const timestamp = generateDate();
     const queryString = `apiKey=${testApiKey}&timestamp=${timestamp}`;
@@ -279,7 +278,7 @@ export async function userInfoWebsocket(wsClient:WebSocket,wsTestURL:string,requ
     }
 }
 
-// trading request 
+// New Order & order status
 export function orderStatusWebsocket(wsClient:WebSocket, wsTestURL:string, requestId:string, testApiSecret:string, testApiKey:string, req:any ) {
     console.log('Inside orderStatus condition');
     if (!testApiKey && !testApiSecret) {
@@ -396,6 +395,8 @@ export function allOrdersWebsocket(wsClient:WebSocket, wsTestURL:string, request
        } 
 
 }
+
+// Trades info
 
 
 // market data stream

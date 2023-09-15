@@ -2,7 +2,7 @@ import {Server, WebSocket } from 'ws';
 import http, { get, request } from 'http';
 import {  getDataStreamListenKey, cancelOrder, /* getOrderStatusFromBinance */ } from './services/binanceService';
 import { eventEmitter } from './events/eventEmitter';
-import { AllTrades} from './models/orderModels';
+import { OrderModel } from './db/models/Order';
 import { sleep, setupWebSocket, WebsocketManager ,generateDate, HandleApiErrors,generateBinanceSignature, BinanceStreamManager} from './utils/utils';
 import dotenv from 'dotenv';
 dotenv.config({path: '.env.local'});
@@ -238,7 +238,7 @@ async function updateOrderInDatabase(orderData: ExecutionReportData) {
 
   while (retries < MAX_RETRIES) {
     try {
-      const updatedOrder = await AllTrades.findOneAndUpdate(
+      const updatedOrder = await OrderModel.findOneAndUpdate(
         { orderId: orderData.i },
         { status: 'FILLED' },
         { new: true, maxTimeMS: 2000 }
@@ -269,7 +269,7 @@ async function updateOrderInDatabase(orderData: ExecutionReportData) {
 
 
 async function getAllOrdersFromMongo() {
-    return await AllTrades.find({status: "NEW"}).lean().maxTimeMS(2000);
+    return await OrderModel.find({status: "NEW"}).lean().maxTimeMS(2000);
 }
 
 async function fetchAllOrdersFromMongo() {

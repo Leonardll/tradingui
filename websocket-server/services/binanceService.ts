@@ -1,4 +1,4 @@
-import { orderSchema } from './../models/orderModels';
+import { OrderModel } from './../db/models/Order';
 import axios from 'axios';
 import  crypto  from 'crypto';
 import http from 'http';
@@ -6,7 +6,6 @@ import dotenv from 'dotenv';
 import {v4 as uuidv4} from 'uuid';
 import { WebSocket, Server  } from 'ws'; 
 import{ setupWebSocket, WebsocketManager, RateLimitManager }from '../utils/utils';
-import { AllTrades } from '../models/orderModels';
 dotenv.config({path: '.env.local'});
 import { set } from 'mongoose';
 const apiKey = process.env.API_KEY;
@@ -97,7 +96,6 @@ let ordersForSymbol: any = {};
 if (!wsTestURL) {
   throw new Error('No test WebSocket URL provided');
 }
-// const binanceWsManager = new WebsocketManager(wsTestURL);
 const rateLimitManager = new RateLimitManager();
 
 
@@ -262,7 +260,7 @@ export async function handleUserDataMessage(
           try {
 
             console.log("attempt update trade status")
-            const result =  await AllTrades.updateOne({ symbol, orderId }, { status: "FILLED" });
+            const result =  await OrderModel.updateOne({ symbol, orderId }, { status: "FILLED" });
             console.log("Update result", result)
           } catch (error) {
              console.error('Error updating order status:', error);
@@ -298,7 +296,7 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
   try {
   
 
-     const count =  AllTrades.countDocuments({});
+     const count =  OrderModel.countDocuments({});
       console.log(`Total orders: ${count}`);
     }
   
@@ -317,7 +315,7 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
         // updateOrderInDatabase(orderData);
         break;
       case 'FILLED':
-        const updateFilledOrder = await AllTrades.findOneAndUpdate(
+        const updateFilledOrder = await OrderModel.findOneAndUpdate(
           { orderId: orderData.i }, // find a document with this orderId
           {
             status: 'FILLED',
@@ -337,7 +335,7 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
         break;
       case 'CANCELED':
         // Handle the canceled order status
-        const updateCanceledOrder = await AllTrades.findOneAndUpdate(
+        const updateCanceledOrder = await OrderModel.findOneAndUpdate(
           {orderId: orderData.i},
           { status: 'CANCELED' },
           { new: true,
@@ -357,7 +355,7 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
         break;
       case 'EXPIRED':
         // Handle the expired order status
-        const updateExpiredOrder = await AllTrades.findOneAndUpdate(
+        const updateExpiredOrder = await OrderModel.findOneAndUpdate(
           { orderId: orderData.i }, 
           { status: 'EXPIRED' }, {
              new: true, 

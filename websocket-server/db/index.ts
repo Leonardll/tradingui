@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, connect } from 'mongoose';
 import dotenv from 'dotenv';
-import { orderSchema } from './models/orderModels';
+import { orderSchema } from './models/Order';
 dotenv.config({path: '.env.local'});
 
 
