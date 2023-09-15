@@ -1,5 +1,4 @@
 import { orderSchema } from './../models/orderModels';
-
 import axios from 'axios';
 import  crypto  from 'crypto';
 import http from 'http';
@@ -10,7 +9,6 @@ import{ setupWebSocket, WebsocketManager, RateLimitManager }from '../utils/utils
 import { AllTrades } from '../models/orderModels';
 dotenv.config({path: '.env.local'});
 import { set } from 'mongoose';
-import { generateRandomId } from '../utils/utils';
 const apiKey = process.env.API_KEY;
 const apiSecret = process.env.API_SECRET;
 const binanceTestUrl = process.env.BINANCE_TEST_URL;
@@ -226,184 +224,9 @@ wsServerConnection.close(); // Close the WebSocket connection
 });
 }
 
-export async function openTradeStream(symbol: string, orderId: string): Promise<WebSocket> {
-  // Construct the URL for the trade stream for the given symbol
-  console.log(symbol, orderId, "log from openTradeStream binanceService.ts");
-
-  const listenKey = await getDataStreamListenKey(); // Assuming this function is asynchronous
-  const tradeStreamUrl = `${streamUrl}/${listenKey}/${symbol.toLowerCase()}@trade`;
-  
-  // Create a WebSocket connection to the trade stream
-  const ws = new WebSocket(tradeStreamUrl);
-
-  // Set up event listeners for the WebSocket connection
-  ws.on('open', () => {
-    console.log(`Connected to the trade stream for ${symbol} with order ID ${orderId}`);
-    reconnectAttempts = 0; // Reset reconnection attempts on successful connection
-  });
-
-  ws.on('message', (data) => {
-    // Parse the incoming data
-    const parsedData = JSON.parse(data.toString()) as ExecutionReportData;
-    console.log("parsedData", parsedData)
-    // Check the event type
-    if (parsedData.e === 'executionReport') {
-      // Handle the execution report data
-      const executionData = parsedData;
-      console.log("executionData", executionData)
-      //ws.send(JSON.stringify({ executionData: executionData }));
-  
-      // Check if the execution data matches the specified order ID
-      if (executionData.o === orderId) {
-        console.log('Received execution report for order ID:', orderId, executionData);
-       // ws.send(JSON.stringify({ executionData: executionData }));
-        // You can handle the execution report data here, such as updating the database or triggering other actions
-      }
-    } else if (parsedData.e === 'trade') {
-      const tradeData = parsedData;
-    //  ws.send(JSON.stringify({ tradeData: tradeData }));
-      // console.log("tradeData", tradeData)
-  
-      // Check if the trade data matches the specified order ID
-      if (tradeData.o === orderId) {
-        console.log('Received trade data for order ID:', orderId, tradeData);
-        // Handle the trade data similarly
-      }
-    }
-  });
-
-  ws.on('error', (error) => {
-    console.error('WebSocket Error:', error);
-  });
-
-  ws.on('close', (code, reason) => {
-    console.log(`Connection closed, code=${code}, reason=${reason}`);
-    if (reconnectAttempts < 5) { // Limit to 5 reconnection attempts
-      reconnectAttempts++;
-      const timeout = reconnectAttempts * 2000; // Increasing delay between attempts
-      console.log(`Reconnecting in ${timeout}ms...`);
-      setTimeout(() => openTradeStream(symbol, orderId), timeout);
-    } else {
-      console.log('Max reconnection attempts reached. Stopping reconnection.');
-    }
-  });
-
-  // Return the WebSocket connection so that the caller can interact with it if needed
-  return ws;
-}
 
 
-export async function getAllOrdersFromBinance(symbol: string, orderId? : number): Promise<Order[]> {
-return new Promise( async (resolve, reject) => {
 
-    try {
-const connectionTest = await checkConnection();
-const wsUserData = new WebSocket(`${wsTestURL}`);
-      if (!testApiSecret) {
-throw new Error('No test API secret provided');
-}
-      const requestId = uuidv4();
-wsUserData.on('open', () => {
-const timeStamp = Date.now();
-const queryString = `apiKey=${testApiKey}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
-const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
-
-        const params = {
-symbol: symbol.toUpperCase(),
-timestamp: timeStamp,
-apiKey: testApiKey,
-signature: signature,
-
-        }
-        const message = {
-id: requestId,
-method: "allOrders",
-params: params,
-}
-// console.log("message", message)
-        wsUserData.send(JSON.stringify(message));
-});
-  
-      wsUserData.on('message', (message: string) => {
-        const data = JSON.parse(message) as BinanceResponse;
-        console.log(`Received all orders  for ${symbol} from  binance:`, data.result.length);
-        if (data.id === requestId) {
-resolve(data.result);
-}
-      });
-      wsUserData.onerror = (event) => {
-        console.error('WebSocket Error:', event);
-      };
-      
-      wsUserData.onclose = (event) => {
-        if (event.wasClean) {
-          console.log(`Closed cleanly, code=${event.code}, reason=${event.reason}`);
-        } else {
-          console.error(`Connection died`); // For example, server process killed or network down
-        }
-      };
-      
-  
-      wsUserData.on('error', (error) => {
-        console.log("error", error)
-        reject( new Error ("Websocket connection error"));
-      });
-    } catch (error) {
-      console.error('Error getting orders:', error);
-reject(error);
-    }
- 
-  });
-} 
-export async function getOrderStatusFromBinance(symbol: string, orderId: number): Promise<Order> {
-return new Promise(async (resolve, reject) => {
-const listenKey = await getDataStreamListenKey();
-const wsUserData = new WebSocket(`${wsTestURL}`)
-    if (!testApiSecret) {
-throw new Error('No test API secret provided');
-}
-    const requestId =   generateRandomId();
-    wsUserData.on('open', () => {
-    const timeStamp = Date.now();
-    const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol.toUpperCase()}&timestamp=${timeStamp}`;
-    const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
-
-      const params = {
-symbol: symbol.toUpperCase(),
-orderId: orderId,
-apiKey: testApiKey,
-signature: signature,
-timestamp: timeStamp,
-}
-      const message = {
-id: requestId,
-method: "order.status",
-params: params,
-}
-      wsUserData.send(JSON.stringify(message));
-});
-
-    wsUserData.on('message', (message: string) => {
-      console.log("message", message)
-      const data = JSON.parse(message) as { id: string; result: Order };
-    console.log('Received order status from Binance:', data);
-    console.log('order status', data.result);
-      if (data.id === requestId) {
-resolve(data.result);
-}
-    });
-
-wsUserData.on('error', (error) => {
-      reject(error);
-});
-
-// Timeout to reject the promise if no response is received within 10 seconds
-     setTimeout(() => {
-      wsUserData.close(); // Close the WebSocket connection
-      reject(new Error('Request timed out'));
-}, 10000);
-  });
-}
 async function updateOrdersForSymbol(symbol: string, newOrders: Order[]) {
   try {
     while (isUpdating) {
@@ -465,28 +288,95 @@ export async function handleUserDataMessage(
         }
 }
 
-export async function getPricefeedStreamForSymbol (symbol: string):Promise<WebSocket> {
-const listenKey = await getDataStreamListenKey();
-console.log(symbol, "log from getPricefeedStreamForSymbol binanceService.ts")
-const wsPriceFeed = `${wsTestURL}/${listenKey}/${symbol.toLowerCase()}@kline_1s`;
-const binanceWsPriceFeed = new WebSocket(wsPriceFeed) 
-  binanceWsPriceFeed.on('open', () => {
-console.log(`Connected to Binance for symbol: ${symbol}`);
-reconnectAttempts = 0; // Reset reconnection attempts on successful connection
 
-  }); 
 
-  binanceWsPriceFeed.on('message', (message: string) => {
-    console.log('Received price feed message from Binance:', message);
-})
 
-  binanceWsPriceFeed.on('error', (error) => {
-    console.log(`WebSocket Price Feed Error for symbol ${symbol}:`, error);
-    });
 
-  return binanceWsPriceFeed 
+export async function updateOrderInDatabase(orderData: ExecutionReportData, orderStatus:string) {
+  // console.log('Updating order in database:', orderData.i)
+
+  try {
   
+
+     const count =  AllTrades.countDocuments({});
+      console.log(`Total orders: ${count}`);
+    }
+  
+  catch (error) {
+    console.error('Error running test query:', error);
   }
 
+  try {
+    switch (orderStatus) {
+      case 'NEW':
+        // Handle the new order status
+        // updateOrderInDatabase(orderData);
+        break;
+      case 'PARTIALLY_FILLED':
+        // Handle the partially filled order status
+        // updateOrderInDatabase(orderData);
+        break;
+      case 'FILLED':
+        const updateFilledOrder = await AllTrades.findOneAndUpdate(
+          { orderId: orderData.i }, // find a document with this orderId
+          {
+            status: 'FILLED',
+            // ... any other fields you want to update
+          },
+          { new: true, 
+            maxTimeMS: 2000,
+          } // return the new updated document
+        );
 
+        console.log('updatedOrder:', updateFilledOrder);
+        if (updateFilledOrder) {
+          console.log('Successfully updated order in database:', updateFilledOrder);
+        } else {
+          console.log('Order not found in database:', orderData.i);
+        } 
+        break;
+      case 'CANCELED':
+        // Handle the canceled order status
+        const updateCanceledOrder = await AllTrades.findOneAndUpdate(
+          {orderId: orderData.i},
+          { status: 'CANCELED' },
+          { new: true,
+            maxTimeMS: 2000,
+          }
+          );
+          console.log('updatedOrder:', updateCanceledOrder);
+          if (updateCanceledOrder) {
+            console.log('Successfully updated cancelled order in database:', updateCanceledOrder);
+          } else {
+            console.log('Order not found in database:', orderData.i);
+          }
+        break;
+      case 'REJECTED':
+        // Handle the rejected order status
+        console.log('Order rejected:', orderData.i);
+        break;
+      case 'EXPIRED':
+        // Handle the expired order status
+        const updateExpiredOrder = await AllTrades.findOneAndUpdate(
+          { orderId: orderData.i }, 
+          { status: 'EXPIRED' }, {
+             new: true, 
+             maxTimeMS: 2000
+          })
+        console.log('updatedOrder:', updateExpiredOrder);
+        if (updateExpiredOrder) {
+          console.log('Successfully updated expired order in database:', updateExpiredOrder);
+        } else {
+          console.log('Order not found in database:', orderData.i);
+        }
+        break;
+      
+      default:
+        console.log('Unknown order status:', status);
+        
+    }
 
+  } catch (error) {
+    console.error('Error updating order in database:', error);
+  }
+}

@@ -1,37 +1,43 @@
-import { Request } from 'express';
 import {Server, WebSocket } from 'ws';
 import http, { get, request } from 'http';
 import {  getDataStreamListenKey, cancelOrder, /* getOrderStatusFromBinance */ } from './services/binanceService';
 import { eventEmitter } from './events/eventEmitter';
-import { v4 as uuidv4 } from 'uuid';
 import { AllTrades} from './models/orderModels';
 import { sleep, setupWebSocket, WebsocketManager ,generateDate, HandleApiErrors,generateBinanceSignature, BinanceStreamManager} from './utils/utils';
 import dotenv from 'dotenv';
 dotenv.config({path: '.env.local'});
 import url from 'url';
 import { set } from 'mongoose';
-import crypto from 'crypto';
 import { ParamsType } from './utils/utils';
 import { generateRandomId } from './utils/utils';
-let isUpdating = false;
+import { exchangeInfoWebsocket, userDataReportWebsocket, userInfoWebsocket, orderStatusWebsocket,allOrdersWebsocket,priceFeedWebsocket } from './services/binanceWsService/binanceWsService';
+
+
+
+// env variables
 const wsTestURL = process.env.BINANCE_TEST_WEBSOCKET_API_URL;
 const streamUrl = process.env.BINANCE_TEST_WEBSOCKET_STREAM_URL;
 const  testApiKey = process.env.BINANCE_TEST_API_KEY;
 const  testApiSecret = process.env.BINANCE_TEST_API_SECRET_KEY;
+
+// variables
+let isUpdating = false;
 let exchangeInfo: ExchangeInfoData | null = null;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
-
-
 let ordersForSymbol: any = {};
 
-type Asset = string;
-type EventTime = number;
-type OrderId = number;
-type ClientOrderId = string;
-type Symbol = string;
-type Balance = number;
 
+// types
+export type Asset = string;
+export type EventTime = number;
+export type OrderId = number;
+export type ClientOrderId = string;
+export type Symbol = string;
+export type Balance = number;
+
+
+// interfaces
 interface Order {
   symbol: string;
   orderId: string;
@@ -72,7 +78,7 @@ interface ExchangeInfoData {
   rateLimits: RateLimit[];
 }
 
-interface BalanceUpdateData {
+export interface BalanceUpdateData {
   e: "balanceUpdate";
   E: EventTime;
   a: Asset;
@@ -119,7 +125,7 @@ interface BinanceResponse {
   result: Order[];
 }
 
-interface ExecutionReportData {
+export interface ExecutionReportData {
   e: string;
   E:EventTime;
   s: Symbol;
@@ -160,7 +166,7 @@ type ClientTradeData = {
   orderId: string;
 };
 
-interface ListStatusData {
+export interface ListStatusData {
   e: "listStatus";
   E: EventTime;
   s: Symbol;
@@ -180,7 +186,7 @@ interface ListStatusData {
 
 
 
-interface OutboundAccountPositionData {
+export interface OutboundAccountPositionData {
   e: "outboundAccountPosition";
   E: EventTime;
   u: EventTime;
@@ -190,7 +196,7 @@ interface OutboundAccountPositionData {
     l: Balance;
   }>;
 }
-interface PriceFeedMessage {
+export interface PriceFeedMessage {
 
   e: string;
   E: number;
@@ -224,6 +230,8 @@ interface BinanceWebSocketError {
 }
 
 
+
+// database functions 
 
 async function updateOrderInDatabase(orderData: ExecutionReportData) {
   let retries = 0;
@@ -279,104 +287,6 @@ async function fetchAllOrdersFromMongo() {
   }
 
 }
-function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
-  console.log('Account Position Update:', data);
-  
-  // Extract relevant information
-  const eventTime = data.E;
-  const lastAccountUpdate = data.u;
-  const balances = data.B;
-
-  // Validate the data
-  if (!Array.isArray(balances)) {
-    console.error('Invalid balance data:', balances);
-    return;
-  }
-
-  // Process each balance
-  balances.forEach((balance: any) => {
-    const asset = balance.a;
-    const free = parseFloat(balance.f);
-    const locked = parseFloat(balance.l);
-
-    if (isNaN(free) || isNaN(locked)) {
-      console.error('Invalid balance values:', balance);
-      return;
-    }
-
-    // Your logic here, e.g., update database, trigger alerts, etc.
-  });
-}
-
-// Function to handle 'balanceUpdate' event
-function handleBalanceUpdate(data: BalanceUpdateData ) {
-  console.log('Balance Update:', data);
-
-  // Extract relevant information
-  const eventTime = data.E;
-  const asset = data.a;
-  const balanceDelta = parseFloat(data.d);
-  const clearTime = data.T;
-
-  if (isNaN(balanceDelta)) {
-    console.error('Invalid balance delta:', data.d);
-    return;
-  }
-
-  // Your logic here, e.g., update database, trigger alerts, etc.
-}
-
-// Function to handle 'executionReport' event
-function handleExecutionReport(data: ExecutionReportData) {
-  console.log('Order Update:', data);
-
-  // Extract relevant information
-  const eventTime = data.E;
-  const symbol = data.s;
-  const clientOrderId = data.c;
-  const side = data.S;
-  const orderType = data.o;
-  const orderStatus = data.X;
-  const orderRejectReason = data.r;
-  const orderId = data.i;
-
-  // Your logic here, e.g., update database, trigger alerts, etc.
-  if (orderStatus === 'NEW') {
-    // Handle new orders
-  } else if (orderStatus === 'CANCELED') {
-    // Handle canceled orders
-  } else if (orderStatus === 'REJECTED') {
-    // Handle rejected orders
-  } else if (orderStatus === 'TRADE') {
-    // Handle trades
-  } else if (orderStatus === 'EXPIRED') {
-    // Handle expired orders
-  } else {
-    console.error('Unknown order status:', orderStatus);
-  }
-}
-// Function to handle 'listStatus' event (for OCO orders)
-function handleListStatus(data: ListStatusData) {
-  console.log('List Status:', data);
-
-  // Extract relevant information
-  const eventTime = data.E;
-  const symbol = data.s;
-  const orderListId = data.g;
-  const contingencyType = data.c;
-  const listStatusType = data.l;
-  const listOrderStatus = data.L;
-  const listRejectReason = data.r;
-
-  // Your logic here, e.g., update database, trigger alerts, etc.
-  if (listOrderStatus === 'EXECUTING') {
-    // Handle executing lists
-  } else if (listOrderStatus === 'ALL_DONE') {
-    // Handle completed lists
-  } else {
-    console.error('Unknown list order status:', listOrderStatus);
-  }
-}
 
 
 // fetchAllOrdersFromMongo()
@@ -427,7 +337,7 @@ function handleListStatus(data: ListStatusData) {
 
 
 
-// websocketServer.ts
+// websocket Server
 
 export async function setupWebSocketServer(server: http.Server, ) {
   const wss = new Server({ server });
@@ -442,316 +352,91 @@ export async function setupWebSocketServer(server: http.Server, ) {
 
   
   console.log('WebSocket connection to exchange opened');
-  wss.on('connection', async (wsClient: WebSocket, req) => {
+  wss.on('connection', async (wsClient: WebSocket, req: any) => {
     // Log the request URL
     console.log('Request URL:', req.url);
   
     // Check if the request URL is '/exchangeInfo'
     if (req.url === '/exchangeInfo') {
       console.log('Inside exchangeInfo condition');
-    
-      // Instantiate WebsocketManager
-      const wsExchangeInfoManager = new WebsocketManager(`${wsTestURL}`, requestId, 'exchangeInfo', {});
-      wsExchangeInfoManager.on('open', () => {
-        console.log('Connection to exchange info opened');
-      });
-      
-      // Setup WebSocket connection to the exchange info
-      wsExchangeInfoManager.on('message', async (data: string | Buffer) => {
-        console.log('Received message from exchange:', data);
-        // You can forward this data to the client if needed
+    if (wsTestURL) {
+      exchangeInfoWebsocket(wsClient, wsTestURL, requestId);
 
-        if (wsClient.readyState === WebSocket.OPEN) {
-          console.log('wsClient is open. Sending data.', data);
-
-
-          if (typeof data === 'object') {
-            wsClient.send(JSON.stringify(data));
-          }else {
-            
-            wsClient.send(JSON.stringify(data))
-          }
-          // Forward this data to the client
-        } else {
-          console.log('wsClient is not open. Cannot send data.');
-        }
-      });
-    
-      wsExchangeInfoManager.on('error', (event) => {
-        console.error('Websocket error:', JSON.stringify(event));
-      });
-    
-      wsExchangeInfoManager.on('close', (code, reason) => {
-        console.log(`WebSocket connection to exchange info closed, code: ${code}, reason: ${reason}`);
-      });
-    
+    } else { 
+      console.error('No test WebSocket URL provided');
+      wsClient.send('No test WebSocket URL provided');
+    }
       // Test message to confirm data sending
      // wsClient.send('Test exchangeInfo message');
     }else if (req.url?.startsWith('/userDataReport')) {
-      if (!testApiKey || !testApiSecret) {
-        console.error('No test API key or secret provided');
-        wsClient.send('No test API key or secret provided');
-        return;
+    if (!testApiKey || !testApiSecret)  {
+      console.log('No test API key or secret provided');
+      wsClient.send('No test API key or secret provided');
+      return;
+    }
+      if (!wsTestURL) {
+        console.error('Incorrect WebSocket URL provided');
+        wsClient.send('Incorrect Websocket URL provided');
+       
+      } else {
+
+        userDataReportWebsocket(wsClient,testApiKey, testApiSecret, wsTestURL, requestId);
       }
-    
-      // Generate listenKey using your API (this part depends on how you've set up API calls)
-      const listenKey = await getDataStreamListenKey();
-    
-      if (!listenKey) {
-        console.error('Failed to generate listenKey');
-        wsClient.send('Failed to generate listenKey');
-        return;
-      }
-    
-      // Create WebSocket URL for user data stream
-      const wsUserDataUrl = `${wsTestURL}/${listenKey}`;
-    
-      // Create a new BinanceStreamManager for the user data stream
-      const binanceStreamManager = new BinanceStreamManager(wsUserDataUrl);
-      console.log('connection  to user data stream opened');
-      // Add a listener to handle incoming user data
-      binanceStreamManager.on('message', (data: any) => {
-        const eventType = data.e;  // Event type
-        
-        switch(eventType) {
-          case 'outboundAccountPosition':
-            handleOutboundAccountPosition(data);
-            break;
-          case 'balanceUpdate':
-            handleBalanceUpdate(data);
-            break;
-          case 'executionReport':
-            handleExecutionReport(data);
-            break;
-          case 'listStatus':
-            handleListStatus(data);
-            break;
-          default:
-            console.log('Unknown event type:', eventType);
-        }
-      
-        if (wsClient.readyState === WebSocket.OPEN) {
-          wsClient.send(JSON.stringify(data));
-        } else {
-          console.log('wsClient is not open. Cannot send user data.');
-        }
-      });
-      
-      // Function to handle 'outboundAccountPosition' event
- 
-    
-      // Handle errors
-      binanceStreamManager.on('error', (error: any) => {
-        console.error('User Data Websocket error:', JSON.stringify(error));
-      });
-    
-      // Handle close events
-      binanceStreamManager.on('close', (code: number, reason: string) => {
-        console.log(`WebSocket connection to user data closed, code: ${code}, reason: ${reason}`);
-      });
     }
     else if (req.url?.startsWith('/userInfo')) {
       if (!testApiKey || !testApiSecret) {
         console.error('No test API key or secret provided');
         wsClient.send('No test API key or secret provided');
-        return;
-      }
-      const timestamp = generateDate();
-      const queryString = `apiKey=${testApiKey}&timestamp=${timestamp}`;
-      const signature = generateBinanceSignature(queryString, testApiSecret);
-      const params: ParamsType = {
-        apiKey: testApiKey,
-        signature: signature,
-        timestamp: timestamp
-      };
-      const wsUserInfoManager = new WebsocketManager(`${wsTestURL}`, requestId, 'account.status', params);
-      wsUserInfoManager.on('open', () => {
-        console.log('Connection to user info opened');
-
-      });
-      wsUserInfoManager.on('message', async (data: string | Buffer) => {
-        console.log('Received user info message from exchange:', data);
-        if (wsClient.readyState === WebSocket.OPEN) {
-          console.log('wsClient is open. Sending data.', data);
-
-
-          if (typeof data === 'object') {
-            wsClient.send(JSON.stringify(data));
-          }else {
-            
-            wsClient.send(JSON.stringify(data))
-          }
-          // Forward this data to the client
+       
+      } else {
+        if (!wsTestURL) {
+          console.error('Incorrect WebSocket URL provided');
+          wsClient.send('Incorrect Websocket URL provided');
         } else {
-          console.log('wsClient is not open. Cannot send data.');
+          userInfoWebsocket(wsClient, wsTestURL, requestId,  testApiSecret, testApiKey);
         }
-      });
-      wsUserInfoManager.on('error', (error:any) => {
-        console.error('User Info Websocket error:', JSON.stringify(error));
-      });
-      wsUserInfoManager.on('close', (code:number, reason:string) => {
-        console.log(`WebSocket connection to user info closed, code: ${code}, reason: ${reason}`);
-      });
+      }
+     
     }
     else if (req.url?.startsWith('/orderStatus')) {
       console.log('Inside orderStatus condition');
-      if (!testApiKey && !testApiSecret) {
-        throw new Error('No test API key provided');
+      if (!testApiKey || !testApiSecret) {
+        console.log('No test API key or secret provided');
+        wsClient.send('No test API key or secret provided') ;
+      } else {
+        if (!wsTestURL) {
+          console.error('Incorrect WebSocket URL provided');
+          wsClient.send('Incorrect Websocket URL provided');
+        } else {
+          orderStatusWebsocket(wsClient, wsTestURL, requestId, testApiSecret, testApiKey, req);
+
+        }
       }
-      const parsedUrl =  new URL(req.url, `http://${req.headers.host}` ); // Parse the URL and the query parameters
-
-      const symbol = parsedUrl.searchParams.get('symbol');
-      const orderId = parsedUrl.searchParams.get('orderId');
-    
-      const timestamp = generateDate();
-      
-      if (!symbol && !orderId) {
-        throw new Error('No symbol or orderId provided');
-       } else {
-
-         const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol}&timestamp=${timestamp}`;
-         const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
-         const params: ParamsType = {
-           symbol: symbol!.toUpperCase() ,
-           orderId: Number(orderId),
-           apiKey: testApiKey,
-           signature: signature,
-           timestamp: timestamp
-         };
-         
-         const wsOrderStatusManager = new WebsocketManager(`${wsTestURL}`, requestId, 'order.status', params);
-         wsOrderStatusManager.on('open', () => {
-           console.log('Connection to order status opened')
-            
-         })
-         wsOrderStatusManager.on('message', async (data: string | Buffer) => {
-           console.log('Received order status message from exchange:', data);
-           // You can forward this data to the client if needed
-   
-           if (wsClient.readyState === WebSocket.OPEN) {
-             console.log('wsClient is open. Sending data.', data);
-   
-   
-             if (typeof data === 'object') {
-               wsClient.send(JSON.stringify(data));
-             }else {
-               
-               wsClient.send(JSON.stringify(data))
-             }
-             // Forward this data to the client
-           } else {
-             console.log('wsClient is not open. Cannot send data.');
-           }
-         });
-         wsOrderStatusManager.on('error', (event) => {
-           console.error('Order Status Websocket error:', JSON.stringify(event));
-         });
-         wsOrderStatusManager.on('close', (code, reason) => {
-           console.log(`WebSocket connection to order status closed, code: ${code}, reason: ${reason}`);
-         })
-       } 
     
     }
     else if (req.url?.startsWith('/allOrders')) {
       console.log('Inside orderStatus condition');
-      if (!testApiKey && !testApiSecret) {
-        throw new Error('No test API key provided');
+      if (!testApiKey || !testApiSecret) {
+        console.log('No test API key or secret provided');
+        wsClient.send('No test API key or secret provided') ;
+      } else {
+        if (!wsTestURL) {
+          console.error('Incorrect WebSocket URL provided');
+          wsClient.send('Incorrect Websocket URL provided');
+        } else { 
+
+          allOrdersWebsocket(wsClient, wsTestURL, requestId, testApiSecret, testApiKey, req);
+        }     
       }
-      const parsedUrl =  new URL(req.url, `http://${req.headers.host}` ); // Parse the URL and the query parameters
-
-      const symbol = parsedUrl.searchParams.get('symbol');
-    
-      const timestamp = Date.now();
-      
-      if (!symbol) {
-        throw new Error('No symbol or orderId provided');
-       } else {
-
-         const queryString = `apiKey=${testApiKey}&symbol=${symbol}&timestamp=${timestamp}`;
-         const signature = crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex");
-         const params: ParamsType = {
-           symbol: symbol!.toUpperCase() ,
-           apiKey: testApiKey,
-           signature: signature,
-           timestamp: timestamp
-         };
-         
-         const wsAllOrder4SymbolManager = new WebsocketManager(`${wsTestURL}`, requestId, 'allOrders', params);
-         wsAllOrder4SymbolManager.on('open', () => {
-           console.log('Connection to order status opened')
-            
-         })
-         wsAllOrder4SymbolManager.on('message', async (data: string | Buffer) => {
-           console.log('Received order status message from exchange:', data);
-           // You can forward this data to the client if needed
-   
-           if (wsClient.readyState === WebSocket.OPEN) {
-             console.log('wsClient is open. Sending data.', data);
-   
-   
-             if (typeof data === 'object') {
-               wsClient.send(JSON.stringify(data));
-             }else {
-               
-               wsClient.send(JSON.stringify(data))
-             }
-             // Forward this data to the client
-           } else {
-             console.log('wsClient is not open. Cannot send data.');
-           }
-         });
-         wsAllOrder4SymbolManager.on('error', (event) => {
-           console.error('Order Status Websocket error:', JSON.stringify(event));
-         });
-         wsAllOrder4SymbolManager.on('close', (code, reason) => {
-           console.log(`WebSocket connection to order status closed, code: ${code}, reason: ${reason}`);
-         })
-       } 
-
     } else if (req.url?.startsWith('/priceFeed')) {
       console.log('Inside priceFeed condition');
-    
-      // Parse the URL to get the symbol for which the price feed is requested
-      const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-      const symbol = parsedUrl.searchParams.get('symbol')?.toUpperCase();
-      const timeframes = parsedUrl.searchParams.get('timeframes')?.split(',') || ['1s']; // Default to 1s if not provided
-
-      let streamID = 1
-      if (!symbol) {
-        console.log('No symbol provided for price feed');
-        wsClient.send('No symbol provided for price feed');
-        return;
+      if (!streamUrl) {
+        console.error('Incorrect WebSocket URL provided');
+        wsClient.send('Incorrect Websocket URL provided');
+      } else {
+        priceFeedWebsocket(wsClient, streamUrl,req,listenkey,);
       }
-    
-    
-      timeframes.forEach((timeframe) => {
-        const wsPriceFeed = `${streamUrl}/${listenkey}/${symbol.toLowerCase()}@kline_${timeframe}`;
-        const binanceStreamManager = new BinanceStreamManager(wsPriceFeed);
-    
-        binanceStreamManager.addListener(`${symbol}`, (data: PriceFeedMessage) => {
-          console.log(`Received price feed data for ${timeframe}:`, data);
-    
-          if (wsClient.readyState === WebSocket.OPEN) {
-            wsClient.send(JSON.stringify(data));
-          } else {
-            console.log('wsClient is not open. Cannot send price feed data.');
-          }
-        });
-    
-        // Handle errors
-        binanceStreamManager.on('error', (error) => {
-          console.error('An error occurred:', error);
-        });
       
-        // Handle close events
-        binanceStreamManager.addListener('close', (code:number, reason:string) => {
-          console.log(`WebSocket connection to price feed closed, code: ${code}, reason: ${reason}`);
-        });
-        // Subscribe to the kline stream for the given symbol and timeframe
-        binanceStreamManager.subscribeToStream('kline', [`${symbol.toLowerCase()}@kline_${timeframe}`], streamID);
-        streamID++;
-      });
-    
       
     }
     
