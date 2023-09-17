@@ -222,9 +222,6 @@ wsServerConnection.close(); // Close the WebSocket connection
 });
 }
 
-
-
-
 async function updateOrdersForSymbol(symbol: string, newOrders: Order[]) {
   try {
     while (isUpdating) {
@@ -285,10 +282,6 @@ export async function handleUserDataMessage(
          symbol && await updateOrdersForSymbol(symbol, data.result);
         }
 }
-
-
-
-
 
 export async function updateOrderInDatabase(orderData: ExecutionReportData, orderStatus:string) {
   // console.log('Updating order in database:', orderData.i)

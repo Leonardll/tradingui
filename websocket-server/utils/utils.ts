@@ -5,8 +5,11 @@ import { v4 as uuidv4} from 'uuid';
 import { EventEmitter } from 'events';
 import { CombinedStreamPayload, StreamType, StreamPayload } from './streamTypes';
 import crypto from 'crypto';
+import { request } from 'http';
+import { json } from 'stream/consumers';
 
 export type StreamCallback = (data: StreamPayload) => void;
+
 
 
 interface BinanceMessage {
@@ -24,13 +27,12 @@ interface RateLimitInfo {
   type WebsocketCallback = (message: string | Buffer) => void;
 export   type ParamsType = {
     orderId?: number;
+    signature?: string;
+    timestamp?: number;
     symbols?: string[];
     symbol?: string;
     apiKey?: string;
-    signature?: string;
-    timestamp?: number;
     recvWindow?: number;
-    cancelRestrictions?: string
     // add other possible fields here
   };
   
@@ -38,6 +40,46 @@ export   type ParamsType = {
     code: number;
     msg: string;
 } 
+interface MarketOrderParams {
+  symbol: string;
+  side: string;
+  type: 'MARKET';
+  quantity: string;
+  timestamp: number;
+  recvWindow?: number;
+  apiKey: string;
+  signature: string;
+}
+interface LimitOrderParams {
+  symbol: string;
+  side: string;
+  type: 'LIMIT';
+  quantity: string;
+  price: number;
+  timeInForce: string;
+  timestamp: number;
+  recvWindow: number;
+  apiKey: string;
+  signature: string;
+  icebergQty?: number;
+  newClientOrderId?: string;
+  newOrderRespType?: string;
+  stopPrice?: number;
+  workingType?: string;
+  
+}
+
+interface CancelOrderParams {
+  symbol: string;
+  orderId: number;
+  timestamp: number;
+  recvWindow: number;
+  apiKey: string;
+  signature: string;
+  newClientOrderId: boolean;
+
+}
+let recvWindow : number = 60000;
 export function generateDate () {
   let currDate = Date.now();
   return currDate;
@@ -154,6 +196,7 @@ export function setupWebSocket(url: string, requestId: string, method: string, p
 
   return ws;
 }
+
 
 export class WebsocketManager {
     private socket: WebSocket | null = null
@@ -583,8 +626,54 @@ export class RateLimitManager {
       "-1100": "ILLEGAL_CHARS: Illegal characters found in a parameter.",
       "-1101": "TOO_MANY_PARAMETERS: Too many parameters sent for this endpoint.",
       "-1102": "MANDATORY_PARAM_EMPTY_OR_MALFORMED: A mandatory parameter was not sent, was empty/null, or malformed.",
-      // ... (add all other error codes and messages here)
+      "-1103": "UNKNOWN_PARAM: An unknown parameter was sent.",
+      "-1104": "UNREAD_PARAMETERS: Not all sent parameters were read.",
+      "-1105": "PARAM_EMPTY: A parameter was empty.",
+      "-1106": "PARAM_NOT_REQUIRED: A parameter was sent when not required.",
+      "-1112": "NO_DEPTH: No orders on book for symbol.",
+      "-1114": "INVALID_LISTEN_KEY: This listenKey does not exist.",
+      "-1115": "MORE_THAN_XX_HOURS: Lookup interval is too big.",
+      "-1116": "OPTIONAL_PARAMS_BAD_COMBO: Combination of optional parameters invalid.",
+      "-1117": "INVALID_PARAMETER: A mandatory parameter was not sent, was empty/null, or malformed.",
+      "-1118": "BAD_API_ID: Invalid API-key, IP, or permissions for action.",
+      "-1119": "DUPLICATE_API_KEY_DESC: Duplicate API key description.",
+      "-1120": "INSUFFICIENT_BALANCE: Insufficient balance.",
+      "-1121": "CANCEL_ALL_FAIL: Some error in canceling all open orders.",
+      "-1125": "TIF_NOT_REQUIRED: TimeInForce parameter sent when not required.",
+      "-1127": "INVALID_TIF: Invalid timeInForce.",
+      "-1128": "INVALID_ORDER_TYPE: Invalid orderType.",
+      "-1130": "INVALID_SIDE: Invalid side.",
+      "-1131": "EMPTY_NEW_CL_ORD_ID: New client order ID was empty.",
+      "-1132": "EMPTY_ORG_CL_ORD_ID: Original client order ID was empty.",
+      "-1133": "BAD_INTERVAL: Invalid interval.",
+      "-1134": "BAD_SYMBOL: Invalid symbol.",
+      "-1135": "INVALID_LISTEN_KEY: This listenKey does not exist.",
+      "-1136": "MORE_THAN_XX_HOURS: Lookup interval is too big.",
+      "-1137": "OPTIONAL_PARAMS_BAD_COMBO: Combination of optional parameters invalid.",
+      "-1138": "INVALID_PARAMETER: A mandatory parameter was not sent, was empty/null, or malformed.",
+      "-1139": "BAD_API_ID: Invalid API-key, IP, or permissions for action.",
+      "-1140": "NEW_ORDER_REJECTED: New order was rejected.",
+      "-1141": "CANCEL_REJECTED: Cancel order was rejected.",
+      "-1142": "CANCEL_ALL_FAIL: Some error in canceling all open orders.",
+      "-1143": "NO_SUCH_ORDER: Specified order does not exist.",
+      "-1144": "BAD_API_ID: Invalid API-key, IP, or permissions for action.",
+      "-1145": "Invalid cancelRestrictions",
+      "-1146": "DUPLICATE_API_KEY_DESC: Duplicate API key description.",
+      "-1147": "INSUFFICIENT_BALANCE: Insufficient balance.",
+      "-1148": "CANCEL_ALL_FAIL: Some error in canceling all open orders.",
+      "-1149": "NO_SUCH_ORDER: Specified order does not exist.",
+      "-1150": "BAD_API_ID: Invalid API-key, IP, or permissions for action.",
+      "-1151": "EMPTY_ORG_CL_ORD_ID: Original client order ID was empty.",
+
       // Add more error codes as needed
+      "-2008": "NO_DEPTH: No orders on book for symbol.",
+      "-2010": "INVALID_LISTEN_KEY: This listenKey does not exist.",
+      "-2011": "Order was not canceled due to cancel restrictions.",
+      "-2012": "INVALID_INTERVAL: Invalid interval.",
+      "-2013": "INVALID_DEPTH: Invalid depth.",
+      "-2014": "INVALID_LIMIT: Invalid limit.",
+      "-2015": "INVALID_START_TIME: Invalid start time.",
+
     };
 
     return new BinanceError(code, errorMessages[code.toString()] || "Unknown Error");
@@ -593,5 +682,280 @@ export class RateLimitManager {
 
 export class HandleApiErrors {
   static BinanceError = BinanceError;
+}
+
+async function executeMarketOrderForBinance(
+  wsClient: WebSocket,
+  wsTestURL: string,
+  testApiKey: string,
+  testApiSecret: string,
+  symbol: string,
+  side: string,
+  quantity: string,
+  requestId: string,
+  //recvWindow: number
+) {
+  if (!testApiKey || !testApiSecret) {
+    throw new Error('Missing API credentials');
+  }
+  if (!symbol) throw new Error('Missing required parameter: symbol');
+  if (!side) throw new Error('Missing required parameter: side');
+  if (!quantity) throw new Error('Missing required parameter: quantity');
+
+  const timestamp = generateDate();
+  const queryString = `apiKey=${testApiKey}&quantity=${quantity}&side=${side.toUpperCase()}&symbol=${symbol.toUpperCase()}&timestamp=${timestamp}&type=MARKET`;
+  console.log('queryString', queryString)
+  const signature = generateBinanceSignature(queryString, testApiSecret);
+  console.log('signature', signature)
+  const params: MarketOrderParams = {
+    symbol: symbol.toUpperCase(),
+    side: side.toUpperCase(),
+    type: 'MARKET',
+    timestamp: timestamp,
+    quantity: quantity,
+    apiKey: testApiKey,
+    signature: signature,
+    //recvWindow  // <-- Added this
+  };
+
+  const wsMarketOrderManager = new WebsocketManager(`${wsTestURL}`, requestId, 'order.place',params)
+  console.log(params)
+  wsMarketOrderManager.on('open',() => {
+    console.log('Connection to limit order manager opened')
+  })
+  
+  wsMarketOrderManager.on('message', async (data: string | Buffer) => {
+    console.log('Received message from limit order manager', data)
+
+    if (wsClient.readyState === WebSocket.OPEN) {
+      console.log('Sending market order message to client:', data);
+
+      if (typeof data === 'object') {
+        console.log(data)
+        wsClient.send(JSON.stringify(data));
+
+      } else {
+        console.log(data)
+        wsClient.send(JSON.stringify(data));
+
+      }
+    } else {
+      console.error('WebSocket is not initialized. Cannot send data');
+    }
+  })
+  wsMarketOrderManager.on('error', (event) => {
+    console.error('Market Order Connection Error:', JSON.stringify(event))
+  })
+  wsMarketOrderManager.on('close', (code, reason) => {
+    console.log(`Market Order Connection closed: ${code} ${reason}`)
+  })
+}
+
+async function cancelMarkOrderForBinance ( wsClient:WebSocket,  wsTestURL:string, testApiKey:string , testApiSecret:string, symbol:string, orderId:number, requestId:string) {
+  if (!testApiKey || !testApiSecret) {
+    throw HandleApiErrors.BinanceError.fromCode(-1002); // Replace with actual error code
+  }
+  const timestamp = generateDate();
+  if (!symbol) {
+    throw HandleApiErrors.BinanceError.fromCode(-1015); // Replace with actual error code
+  }
+  if (!orderId) {
+    throw HandleApiErrors.BinanceError.fromCode(-1014); // Replace with actual error code
+  }
+  const queryString = `apikey=${testApiKey}&symbol=${symbol}&orderId=${orderId}&newClientOrderId=false&timestamp=${timestamp}&recvWindow=${recvWindow}`;
+  const signature = generateBinanceSignature(queryString, testApiSecret);
+  const params : CancelOrderParams = {
+    symbol: symbol,
+    orderId: orderId,
+    apiKey: testApiKey,
+    signature: signature,
+    timestamp: timestamp,
+    recvWindow: recvWindow,
+    newClientOrderId: false,
+  }
+  const wsLimitOrderManager = new WebsocketManager(`${wsTestURL}`, requestId, 'order.cancel',params)
+  wsLimitOrderManager.on('open',() => {
+    console.log('Connection to limit order manager opened')
+  })
+  
+  wsLimitOrderManager.on('message', async (data: string | Buffer) => {
+    console.log('Received message from limit order manager', data)
+
+    if (wsClient.readyState === WebSocket.OPEN) {
+      console.log('Sending limit order message to client:', data);
+
+      if (typeof data === 'object') {
+        wsClient.send(JSON.stringify(data));
+
+      } else {
+        wsClient.send(JSON.stringify(data));
+
+      }
+    } else {
+      console.error('WebSocket is not initialized. Cannot send data');
+    }
+  })
+  wsLimitOrderManager.on('error', (event) => {
+    console.error('Cancel Order Connection Error:', JSON.stringify(event))
+  })
+  wsLimitOrderManager.on('close', (code, reason) => {
+    console.log(`Cancel Order Connection closed: ${code} ${reason}`)
+  })
+}
+
+async function executeLimitOrderForBinance(
+  wsClient: WebSocket,
+  wsTestURL: string,
+  testApiKey: string,
+  testApiSecret: string,
+  symbol: string,
+  side: string,
+  quantity: string,
+  price: string,
+  requestId: string,
+  recvWindow: number,  // <-- Added this
+  icebergQty?: number,
+  // ... other optional params
+) {
+  if (!testApiKey || !testApiSecret) {
+    throw new Error('Missing API credentials');
+  }
+  if (!symbol) throw new Error('Missing required parameter: symbol');
+  if (!side) throw new Error('Missing required parameter: side');
+  if (!quantity) throw new Error('Missing required parameter: quantity');
+  if (!price) throw new Error('Missing required parameter: price');
+  const timestamp = generateDate();
+  let queryString = `apiKey=${testApiKey}&symbol=${symbol.toUpperCase()}&side=${side.toUpperCase()}&type=LIMIT&timeInForce=GTC&quantity=${quantity}&price=${price}&timestamp=${timestamp}&recvWindow=${recvWindow}`;
+  const signature = generateBinanceSignature(queryString, testApiSecret);
+
+  const params: LimitOrderParams = {
+    symbol,
+    side,
+    type: 'LIMIT',
+    quantity: quantity,
+    price: Number(price),
+    timeInForce: 'GTC',
+    apiKey: testApiKey,
+    signature,
+    timestamp: generateDate(),
+    recvWindow,  // <-- Added this
+    // ... conditionally add other optional params
+  };
+  const wsLimitOrderManager = new WebsocketManager(`${wsTestURL}`, requestId, 'sor.order.place',params)
+  wsLimitOrderManager.on('open',() => {
+    console.log('Connection to limit order manager opened')
+  })
+  
+  wsLimitOrderManager.on('message', async (data: string | Buffer) => {
+    console.log('Received message from limit order manager', data)
+
+    if (wsClient.readyState === WebSocket.OPEN) {
+      console.log('Sending limit order message to client:', data);
+
+      if (typeof data === 'object') {
+        wsClient.send(JSON.stringify(data));
+
+      } else {
+        wsClient.send(JSON.stringify(data));
+
+      }
+    } else {
+      console.error('WebSocket is not initialized. Cannot send data');
+    }
+  })
+  wsLimitOrderManager.on('error', (event) => {
+    console.error('Limit Order Connection Error:', JSON.stringify(event))
+  })
+  wsLimitOrderManager.on('close', (code, reason) => {
+    console.log(`Limit Order Connection closed: ${code} ${reason}`)
+  })
+}
+
+export class OrderController {
+  wsClient: WebSocket;
+  wsTestURL: string;
+  testApiSecret: string;
+  testApiKey: string;
+  recvWindow: number;
+
+
+  constructor(wsClient: WebSocket, wsTestURL: string, testApiKey: string, testApiSecret: string) {
+    this.wsClient = wsClient;
+    this.wsTestURL = wsTestURL;
+    this.testApiSecret = testApiSecret;
+    this.testApiKey = testApiKey;
+    this.recvWindow = recvWindow;
+ 
+  }
+ 
+  
+ async handleBinanceMarketOrder(wsClient: WebSocket, symbol: string, side: string, quantity: string, requestId: string, testApiKey: string, testApiSecret: string) {
+    try {
+      await executeMarketOrderForBinance(
+        wsClient,
+        this.wsTestURL,
+        testApiKey,
+        testApiSecret,
+        symbol,
+        side,
+        quantity,
+        requestId,
+        //recvWindow
+        
+      )
+      console.log('Binance market order handled successfully');
+      } catch (error) {
+        console.error('Error executing Binance market order:', error);
+      }
+  }
+ async handleBinanceLimitOrder( wsClient:WebSocket, symbol:string, side:string, quantity:string, price:string, requestId:string, testApiKey:string, testApiSecret:string,  ) {
+    try {
+      await executeLimitOrderForBinance(
+        this.wsClient,
+        this.wsTestURL,
+        this.testApiKey,
+        this.testApiSecret,
+        symbol,
+        side,
+        quantity,
+        price,
+        requestId,
+        recvWindow
+
+
+      )
+      console.log('Binance limit order handled successfully');
+      } catch (error) {
+        console.error('Error executing Binance limit order:', error);
+      }
+  }
+
+  
+ 
+  async handleBinanceStopLossOrder() {}
+  async handleBinanceStopLossLimitOrder() {}
+  async handleBinanceTakeProfitOrder() {}
+  async handleBinanceTakeProfitLimitOrder() {}
+  async handleBinanceLimitOcoOrder() {}
+  async handleBinanceCancelOrder( symbol:string, orderId:number,requestId:string) {
+    try {
+      await cancelMarkOrderForBinance(
+        this.wsClient,
+        this.wsTestURL,
+        this.testApiKey,
+        this.testApiSecret,
+        symbol,
+        orderId,
+        requestId
+      )
+      console.log('Binance limit order handled successfully');
+      } catch (error) {
+        console.error('Error executing Binance limit order:', error);
+      }
+  }
+  async handleBinanceCancelAllOrders() {}
+  async handleBinanceCancelOcoOrder() {}
+  async handleBinanceReplaceOrder() {}
+
 }
 

@@ -1,3 +1,4 @@
+import { OrderModel } from './db/models/Order';
 import express, {Express, Request, Response, NextFunction} from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -5,7 +6,6 @@ import routes from './routes'; // Assuming you have a routes.ts file
 import dotenv from 'dotenv';
 import { setupWebSocketServer } from './websocketServer';
 import { connectToMongoDB } from './db';
-import { AllTrades } from './models/orderModels';
 import { set } from 'mongoose';
 import { eventEmitter } from './events/eventEmitter';
 

@@ -1,4 +1,4 @@
-import {WebsocketManager, BinanceStreamManager,generateDate, generateBinanceSignature, ParamsType } from '../../utils/utils'
+import {WebsocketManager, BinanceStreamManager,generateDate, generateBinanceSignature, ParamsType,  } from '../../utils/utils'
 import WebSocket from 'ws';
 import { getDataStreamListenKey, updateOrderInDatabase} from '../binanceService';
 import { PriceFeedMessage,EventTime, Symbol, OrderId, ClientOrderId, OutboundAccountPositionData, BalanceUpdateData, ExecutionReportData } from '../../websocketServer';
@@ -9,6 +9,7 @@ import { PriceFeedMessage,EventTime, Symbol, OrderId, ClientOrderId, OutboundAcc
  */
 
 
+let recvWindow = 60000
 interface ListStatusData {
     e: "listStatus";
     E: EventTime;
@@ -232,7 +233,7 @@ export async function userDataReportWebsocket (wsClient: WebSocket,testApiKey:st
 }
 
 // user account info
-export async function userInfoWebsocket(wsClient:WebSocket,wsTestURL:string,requestId:string,testApiSecret:string, testApiKey:string){
+export async function userInfoWebsocket(wsClient:WebSocket,wsTestURL:string, testApiKey:string,testApiSecret:string,  requestId:string,){
     const timestamp = generateDate();
     const queryString = `apiKey=${testApiKey}&timestamp=${timestamp}`;
     const signature = generateBinanceSignature(queryString, testApiSecret);
@@ -278,8 +279,11 @@ export async function userInfoWebsocket(wsClient:WebSocket,wsTestURL:string,requ
     }
 }
 
-// New Order & order status
-export function orderStatusWebsocket(wsClient:WebSocket, wsTestURL:string, requestId:string, testApiSecret:string, testApiKey:string, req:any ) {
+// New Order 
+
+
+//order info
+export async function orderStatusWebsocket(wsClient:WebSocket, wsTestURL:string, requestId:string, testApiSecret:string, testApiKey:string, req:any ) {
     console.log('Inside orderStatus condition');
     if (!testApiKey && !testApiSecret) {
       throw new Error('No test API key provided');
@@ -295,16 +299,17 @@ export function orderStatusWebsocket(wsClient:WebSocket, wsTestURL:string, reque
       throw new Error('No symbol or orderId provided');
      } else {
 
-       const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol}&timestamp=${timestamp}`;
+       const queryString = `apiKey=${testApiKey}&orderId=${orderId}&symbol=${symbol?.toUpperCase()}&timestamp=${timestamp}`;
        const signature = generateBinanceSignature(queryString, testApiSecret);
        const params: ParamsType = {
          symbol: symbol!.toUpperCase() ,
          orderId: Number(orderId),
          apiKey: testApiKey,
          signature: signature,
-         timestamp: timestamp
+        // recvWindow: recvWindow,
+         timestamp: timestamp,
        };
-       
+       console.log('Params for order status', params);
        const wsOrderStatusManager = new WebsocketManager(`${wsTestURL}`, requestId, 'order.status', params);
        wsOrderStatusManager.on('open', () => {
          console.log('Connection to order status opened')
@@ -339,7 +344,7 @@ export function orderStatusWebsocket(wsClient:WebSocket, wsTestURL:string, reque
   
 }
 
-export function allOrdersWebsocket(wsClient:WebSocket, wsTestURL:string, requestId:string, testApiSecret:string, testApiKey:string, req:any ) {
+export function allOrdersWebsocket(wsClient:WebSocket, wsTestURL:string, requestId:string , testApiSecret:string, testApiKey:string, req:any ) {
     if (!testApiKey && !testApiSecret) {
         throw new Error('No test API key provided');
       }
@@ -347,7 +352,7 @@ export function allOrdersWebsocket(wsClient:WebSocket, wsTestURL:string, request
 
       const symbol = parsedUrl.searchParams.get('symbol');
     
-      const timestamp = Date.now();
+      const timestamp = generateDate();
       
       if (!symbol) {
         throw new Error('No symbol or orderId provided');
@@ -355,13 +360,14 @@ export function allOrdersWebsocket(wsClient:WebSocket, wsTestURL:string, request
 
          const queryString = `apiKey=${testApiKey}&symbol=${symbol}&timestamp=${timestamp}`;
          const signature = generateBinanceSignature(queryString, testApiSecret);
+        console.log(queryString)
          const params: ParamsType = {
            symbol: symbol!.toUpperCase() ,
            apiKey: testApiKey,
            signature: signature,
            timestamp: timestamp
          };
-         
+         console.log(params)
          const wsAllOrder4SymbolManager = new WebsocketManager(`${wsTestURL}`, requestId, 'allOrders', params);
          wsAllOrder4SymbolManager.on('open', () => {
            console.log('Connection to order status opened')

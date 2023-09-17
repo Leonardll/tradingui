@@ -8,9 +8,9 @@ import dotenv from 'dotenv';
 dotenv.config({path: '.env.local'});
 import url from 'url';
 import { set } from 'mongoose';
-import { ParamsType } from './utils/utils';
-import { generateRandomId } from './utils/utils';
+import { ParamsType, generateRandomId, OrderController } from './utils/utils';
 import { exchangeInfoWebsocket, userDataReportWebsocket, userInfoWebsocket, orderStatusWebsocket,allOrdersWebsocket,priceFeedWebsocket } from './services/binanceWsService/binanceWsService';
+import test from 'node:test';
 
 
 
@@ -20,12 +20,16 @@ const streamUrl = process.env.BINANCE_TEST_WEBSOCKET_STREAM_URL;
 const  testApiKey = process.env.BINANCE_TEST_API_KEY;
 const  testApiSecret = process.env.BINANCE_TEST_API_SECRET_KEY;
 
+
+// Controller
+
 // variables
 let isUpdating = false;
 let exchangeInfo: ExchangeInfoData | null = null;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
 let ordersForSymbol: any = {};
+const recvWindow = 60000;
 
 
 // types
@@ -348,13 +352,21 @@ export async function setupWebSocketServer(server: http.Server, ) {
   }
   const requestId = generateRandomId();
   const listenkey  = await getDataStreamListenKey()
+  
   console.log('listenkey', listenkey);
-
+  
   
   console.log('WebSocket connection to exchange opened');
   wss.on('connection', async (wsClient: WebSocket, req: any) => {
     // Log the request URL
     console.log('Request URL:', req.url);
+
+    if (!wsTestURL) {
+      console.error('No test WebSocket URL provided');
+      wsClient.send('No test WebSocket URL provided');
+      return;
+    }
+    const orderController = new OrderController( wsClient,wsTestURL, requestId, testApiSecret);
   
     // Check if the request URL is '/exchangeInfo'
     if (req.url === '/exchangeInfo') {
@@ -393,7 +405,7 @@ export async function setupWebSocketServer(server: http.Server, ) {
           console.error('Incorrect WebSocket URL provided');
           wsClient.send('Incorrect Websocket URL provided');
         } else {
-          userInfoWebsocket(wsClient, wsTestURL, requestId,  testApiSecret, testApiKey);
+          userInfoWebsocket(wsClient, wsTestURL, testApiKey, testApiSecret, requestId);
         }
       }
      
@@ -408,7 +420,7 @@ export async function setupWebSocketServer(server: http.Server, ) {
           console.error('Incorrect WebSocket URL provided');
           wsClient.send('Incorrect Websocket URL provided');
         } else {
-          orderStatusWebsocket(wsClient, wsTestURL, requestId, testApiSecret, testApiKey, req);
+          orderStatusWebsocket(wsClient, wsTestURL, requestId, testApiSecret,testApiKey , req);
 
         }
       }
@@ -438,7 +450,83 @@ export async function setupWebSocketServer(server: http.Server, ) {
       }
       
       
+    } else if (req.url?.startsWith('/marketOrder')) {
+      console.log('Inside marketOrder condition');
+      if (!testApiKey || !testApiSecret) {
+        console.log('No test API key or secret provided');
+        wsClient.send('No test API key or secret provided');
+      } else {
+        if (!wsTestURL) {
+          console.error('Incorrect WebSocket URL provided');
+          wsClient.send('Incorrect WebSocket URL provided');
+        } else {
+          // Assuming you have a function to parse and validate the request parameters
+         // const params = parseMarketOrderRequest(req);
+         const parsedUrl = url.parse(req.url, true);
+
+         if (parsedUrl && parsedUrl.query ) {
+          const { symbol, side, quantity } = parsedUrl.query;
+          
+          if (symbol && typeof(symbol) === 'string' && side && typeof(side) === 'string' && quantity && typeof(quantity) === 'string') {
+            orderController.handleBinanceMarketOrder(
+              wsClient,
+    symbol,
+    side,
+    quantity,
+    requestId,
+    testApiKey,
+    testApiSecret
+            )
+            .then(() => {
+              wsClient.send('Market order successfully placed.');
+            })
+            .catch(err => {
+              wsClient.send(`Error placing market order: ${err.message}`);
+            });
+          } else {
+            wsClient.send('Missing required parameters: symbol, side, or quantity.');
+          }
+        } else {
+          wsClient.send('Invalid request URL or missing parameters.');
+        }
+        }
+      }
+    } else if (req.url?.startsWith('/limitOrder')) {
+      console.log('Inside limitOrder condition');
+      
+      if (!testApiKey || !testApiSecret) {
+        console.log('No test API key or secret provided');
+        wsClient.send('No test API key or secret provided');
+      } else {
+        if (!wsTestURL) {
+          console.error('Incorrect WebSocket URL provided');
+          wsClient.send('Incorrect WebSocket URL provided');
+        } else {
+          // Parse the limit order request to get necessary parameters
+         // const { symbol, side, price, quantity, requestId } = parseLimitOrderRequest(req);
+          
+          // Create an instance of OrderController
+          const orderController = new OrderController(wsClient, wsTestURL, testApiKey, testApiSecret);
+          
+          try {
+            // Handle the limit order
+            await orderController.handleBinanceLimitOrder(wsClient,req.url.params.symbol, req.url.params.side, req.url.params.quantity, req.url.params.price, requestId,testApiKey, testApiSecret);
+            wsClient.send('Limit order placed successfully');
+          } catch (error) {
+            console.error('Error placing limit order:', error);
+            wsClient.send('Error placing limit order');
+          }
+        }
+      }
     }
+    
+    else if (req.url?.startsWith('/ocoOrder')) {}
+    else if (req.url?.startsWith('/cancelOrder')) {}
+    else if (req.url?.startsWith('/trades')) {}
+    else if (req.url?.startsWith('/')) {}
+    else if (req.url?.startsWith('/')) {}
+    else if (req.url?.startsWith('/')) {}
+    else if (req.url?.startWith('/')) {}
     
   
     wsClient.addListener('message',  async function incoming(message) {
