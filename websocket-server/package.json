@@ -38,7 +38,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.ts",
+    "start": "NODE_ENV=test node dist/server.ts",
     "dev": "concurrently \"tsc --watch\" \"nodemon dist/server.js\"",
     "pretty": "prettier --write \"./**/*.{js,jsx,ts,tsx,json}\""
   }

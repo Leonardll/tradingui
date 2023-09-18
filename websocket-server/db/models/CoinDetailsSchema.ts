@@ -1,5 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
-
+import mongoose, { Schema, Document } from "mongoose"
 
 const CoinDetailSchema = new Schema({
     symbol: { type: String, index: true }, // e.g., BTC, ETH
@@ -9,11 +8,10 @@ const CoinDetailSchema = new Schema({
     marketCap: Number, // Market capitalization
     volume24h: Number, // 24-hour trading volume
     // ... any other fields you find relevant
-  });
-  
-  CoinDetailSchema.index({ symbol: 1 });
-  const isTestEnv = process.env.NODE_ENV === 'test';
-const collectionPrefix = isTestEnv ? 'test_' : 'real_';
-  
-  export const CoinDetailModel = mongoose.model(`${collectionPrefix}CoinDetails`, CoinDetailSchema);
-  
+})
+
+CoinDetailSchema.index({ symbol: 1 })
+const isTestEnv = process.env.NODE_ENV === "test"
+const collectionPrefix = isTestEnv ? "test_" : "real_"
+
+export const CoinDetailModel = mongoose.model(`${collectionPrefix}CoinDetails`, CoinDetailSchema)

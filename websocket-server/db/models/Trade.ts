@@ -1,16 +1,14 @@
-
-import mongoose,{ Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document } from "mongoose"
 
 export interface ITrade extends Document {
-  symbol: string;
-  tradeId: number;
-  price: string;
-  qty: string;
-  time: number;
-  isBuyerMaker: boolean;
-  isBestMatch: boolean;
+    symbol: string
+    tradeId: number
+    price: string
+    qty: string
+    time: number
+    isBuyerMaker: boolean
+    isBestMatch: boolean
 }
-
 
 const TradeSchema = new Schema({
     symbol: { type: String, index: true },
@@ -20,9 +18,9 @@ const TradeSchema = new Schema({
     time: Number,
     isBuyerMaker: Boolean,
     isBestMatch: Boolean,
-  });
-  
-  const isTestEnv = process.env.NODE_ENV === 'test';
-  const collectionPrefix = isTestEnv ? 'test_' : 'real_';
+})
 
-  export const TradeModel = mongoose.model<ITrade>(`${collectionPrefix}Trades`, TradeSchema);
+const isTestEnv = process.env.NODE_ENV === "test"
+const collectionPrefix = isTestEnv ? "test_" : "real_"
+
+export const TradeModel = mongoose.model<ITrade>(`${collectionPrefix}Trades`, TradeSchema)
