@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose"
+import dotenv from "dotenv"
 
 export interface IFill {
     price: string
@@ -56,6 +57,8 @@ export const orderSchema = new Schema({
 orderSchema.index({ orderId: 1, symbol: 1, status: 1 })
 
 const isTestEnv = process.env.NODE_ENV === "test"
+console.log("isTestEnv", isTestEnv)
 const collectionPrefix = isTestEnv ? "test_" : "real_"
+console.log("collectionPrefix", collectionPrefix)
 
 export const OrderModel = mongoose.model<IOrder>(`${collectionPrefix}Orders`, orderSchema)

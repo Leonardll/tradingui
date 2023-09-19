@@ -9,8 +9,7 @@ import { connectToMongoDB } from "./db"
 import { set } from "mongoose"
 import { eventEmitter } from "./events/eventEmitter"
 
-dotenv.config({ path: ".env.test" });
-
+dotenv.config({ path: ".env.test" })
 
 const app = express()
 app.use(express.json())

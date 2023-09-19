@@ -1,31 +1,19 @@
-
-
 import { OrderModel } from "./../db/models/Order"
 import axios from "axios"
 import crypto from "crypto"
 import http from "http"
 import dotenv from "dotenv"
 
+dotenv.config({ path: ".env.test" })
 
-
- dotenv.config({ path: '.env.test' });
-
-
-console.log("NODE_ENV:", process.env.NODE_ENV);
-
-
-
-
-
-
+console.log("NODE_ENV:", process.env.NODE_ENV)
 
 import { v4 as uuidv4 } from "uuid"
 import { WebSocket, Server } from "ws"
-import { setupWebSocket, WebsocketManager, RateLimitManager} from "../utils/utils"
-import { ExecutionReportData} from "../websocketServer"
+import { setupWebSocket, WebsocketManager, RateLimitManager } from "../utils/utils"
+import { ExecutionReportData } from "../websocketServer"
 
 import { set } from "mongoose"
-
 
 const apiKey = process.env.API_KEY
 const apiSecret = process.env.API_SECRET
@@ -100,7 +88,7 @@ interface BinanceErrorType {
     code: number
     msg: string
 }
-console.log("Debug: wsTestURL", wsTestURL);
+console.log("Debug: wsTestURL", wsTestURL)
 
 let isUpdating = false
 let ordersForSymbol: any = {}
@@ -112,7 +100,6 @@ const rateLimitManager = new RateLimitManager()
 let reconnectAttempts = 0
 let reconnectInterval = 1000 // 1 second
 let maxReconnectInterval = 30000 // 30 seconds
-
 
 export async function getDataStreamListenKey() {
     const { data } = await axios.post(`${binanceTestUrl}/userDataStream`, null, {
@@ -256,8 +243,8 @@ export async function handleUserDataMessage(wsClient: WebSocket, symbol: string,
 export async function updateOrderInDatabase(orderData: ExecutionReportData, orderStatus: string) {
     try {
         if (!orderData || Object.keys(orderData).length === 0 || !orderData.e || !orderData.i) {
-            console.log("Invalid order data, skipping database operation.");
-            return;
+            console.log("Invalid order data, skipping database operation.")
+            return
         }
 
         // Check for WebSocket ping
@@ -265,10 +252,10 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
         //     console.log("Received WebSocket ping, skipping database operation.");
         //     return;
         // }
-        
-        let count = await OrderModel.countDocuments({});
-        console.log(`Total orders: ${count}`);
-        console.log("Order Data before updating:", orderData);
+
+        let count = await OrderModel.countDocuments({})
+        console.log(`Total orders: ${count}`)
+        console.log("Order Data before updating:", orderData)
 
         switch (orderStatus) {
             case "NEW":
@@ -276,37 +263,39 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
                 const newOrder = new OrderModel({
                     ...orderData,
                     status: "NEW",
-                });
-                await newOrder.save();
-                console.log("New order inserted into database:", newOrder);
-                break;
+                })
+                await newOrder.save()
+                console.log("New order inserted into database:", newOrder)
+                break
 
             case "PARTIALLY_FILLED":
                 // Handle the partially filled order status
                 // Update logic here if needed
-                break;
+                break
 
             case "FILLED":
                 // Update the order as filled
                 const updateFilledOrder = await OrderModel.findOneAndUpdate(
                     { orderId: orderData.i },
                     { status: "FILLED" },
-                    { new: true, maxTimeMS: 2000 }
-                );
+                    { new: true, maxTimeMS: 2000 },
+                )
                 if (updateFilledOrder) {
-                    console.log("Successfully updated filled order in database:", updateFilledOrder);
+                    console.log(
+                        "Successfully updated filled order in database:",
+                        updateFilledOrder,
+                    )
                 } else {
-                    console.log("Order not found in database:", orderData.i);
+                    console.log("Order not found in database:", orderData.i)
                 }
-                break;
+                break
 
             // ... (rest of the cases remain the same)
 
             default:
-                console.log("Unknown order status:", orderStatus);
+                console.log("Unknown order status:", orderStatus)
         }
-
     } catch (error) {
-        console.error("Error updating order in database:", error);
+        console.error("Error updating order in database:", error)
     }
 }

@@ -27,6 +27,7 @@ import {
     orderStatusWebsocket,
     allOrdersWebsocket,
     priceFeedWebsocket,
+    // initialiseUserDataStream
 } from "./services/binanceWsService/binanceWsService"
 
 // env variables
@@ -347,7 +348,7 @@ async function fetchAllOrdersFromMongo() {
 export async function setupWebSocketServer(server: http.Server) {
     const wss = new Server({ server })
     console.log("WebSocket server created")
-    if (!testApiSecret) {
+    if (!testApiSecret || !testApiKey) {
         throw new Error("No test API secret provided")
     }
     const requestId = generateRandomId()
@@ -356,15 +357,18 @@ export async function setupWebSocketServer(server: http.Server) {
     console.log("listenkey", listenkey)
 
     console.log("WebSocket connection to exchange opened")
+
     wss.on("connection", async (wsClient: WebSocket, req: any) => {
         // Log the request URL
         console.log("Request URL:", req.url)
-
-        if (!wsTestURL) {
+        if (!wsTestURL || !streamUrl) {
             console.error("No test WebSocket URL provided")
             wsClient.send("No test WebSocket URL provided")
             return
         }
+        // console.log('initialised user data stream')
+        //  await initialiseUserDataStream(wsClient, wsTestURL, streamUrl, requestId, testApiKey)
+        await userDataReportWebsocket(wsClient, testApiKey, testApiSecret, streamUrl, requestId)
         const orderController = new OrderController(wsClient, wsTestURL, requestId, testApiSecret)
 
         // Check if the request URL is '/exchangeInfo'
@@ -487,7 +491,6 @@ export async function setupWebSocketServer(server: http.Server) {
                                 )
                                 .then(() => {
                                     wsClient.send("Market order successfully placed.")
-                                   
                                 })
                                 .catch((err) => {
                                     wsClient.send(`Error placing market order: ${err.message}`)
@@ -515,32 +518,44 @@ export async function setupWebSocketServer(server: http.Server) {
                 } else {
                     // Parse the limit order request to get necessary parameters
                     // const { symbol, side, price, quantity, requestId } = parseLimitOrderRequest(req);
+                    const parsedUrl = url.parse(req.url, true)
+                    if (parsedUrl && parsedUrl.query) {
+                        const { symbol, side, price, quantity } = parsedUrl.query
 
-                    // Create an instance of OrderController
-                    const orderController = new OrderController(
-                        wsClient,
-                        wsTestURL,
-                        testApiKey,
-                        testApiSecret,
-                    )
+                        try {
+                            // Handle the limit order
 
-                    try {
-                        // Handle the limit order
-                        await orderController.handleBinanceLimitOrder(
-                            wsClient,
-                            req.url.params.symbol,
-                            req.url.params.side,
-                            req.url.params.quantity,
-                            req.url.params.price,
-                            requestId,
-                            testApiKey,
-                            testApiSecret,
-                        )
-                        wsClient.send("Limit order placed successfully")
-                    } catch (error) {
-                        console.error("Error placing limit order:", error)
-                        wsClient.send("Error placing limit order")
+                            if (
+                                symbol &&
+                                typeof symbol === "string" &&
+                                side &&
+                                typeof side === "string" &&
+                                quantity &&
+                                typeof quantity === "string" &&
+                                price &&
+                                typeof price === "string"
+                            ) {
+                                await orderController.handleBinanceLimitOrder(
+                                    wsClient,
+                                    symbol,
+                                    side,
+                                    quantity,
+                                    price,
+                                    requestId,
+                                    testApiKey,
+                                    testApiSecret,
+                                )
+                            }
+
+                            wsClient.send("Limit order placed successfully")
+                        } catch (error) {
+                            console.error("Error placing limit order:", error)
+                            wsClient.send("Error placing limit order")
+                        }
+                    } else {
+                        console.log("Invalid request URL or missing parameters.")
                     }
+                    // Create an instance of OrderController
                 }
             }
         } else if (req.url?.startsWith("/ocoOrder")) {

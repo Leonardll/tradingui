@@ -18,9 +18,11 @@ import {
     ExecutionReportData,
 } from "../../websocketServer"
 import { OrderModel } from "../../db/models/Order"
+import { isConstructorDeclaration } from "typescript"
 /**
  * Initialize and manage WebSocket connection for exchange info.
  * @param wsTestURL - The WebSocket test URL for the exchange.
+ * @param streamUrl - The WebSocket stream URL for the exchange.
  * @param requestId - The request ID for the WebSocket connection.
  */
 
@@ -43,41 +45,41 @@ interface ListStatusData {
     }>
 }
 interface Fill {
-  price: string;
-  qty: string;
-  commission: string;
-  commissionAsset: string;
-  tradeId: number;
+    price: string
+    qty: string
+    commission: string
+    commissionAsset: string
+    tradeId: number
 }
 interface RateLimit {
-  rateLimitType: string;
-  interval: string;
-  intervalNum: number;
-  limit: number;
-  count: number;
+    rateLimitType: string
+    interval: string
+    intervalNum: number
+    limit: number
+    count: number
 }
 interface OrderResult {
-  symbol: string;
-  orderId: number;
-  orderListId: number;
-  clientOrderId: string;
-  transactTime: number;
-  price: string;
-  origQty: string;
-  executedQty: string;
-  cummulativeQuoteQty: string;
-  status: string;
-  timeInForce: string;
-  type: string;
-  side: string;
-  workingTime: number;
-  fills?: Fill[];  // Optional, as it may not be present in all responses
+    symbol: string
+    orderId: number
+    orderListId: number
+    clientOrderId: string
+    transactTime: number
+    price: string
+    origQty: string
+    executedQty: string
+    cummulativeQuoteQty: string
+    status: string
+    timeInForce: string
+    type: string
+    side: string
+    workingTime: number
+    fills?: Fill[] // Optional, as it may not be present in all responses
 }
 interface OrderResponse {
-  id: string;
-  status: number;
-  result: OrderResult;
-  rateLimits: RateLimit[];
+    id: string
+    status: number
+    result: OrderResult
+    rateLimits: RateLimit[]
 }
 async function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
     console.log("Account Position Update:", data)
@@ -104,7 +106,7 @@ async function handleOutboundAccountPosition(data: OutboundAccountPositionData) 
             return
         }
 
-        // Your logic here, e.g., update database, trigger alerts, etc.
+        //  logic here, e.g., update database, trigger alerts, etc.
     })
 }
 
@@ -123,64 +125,75 @@ async function handleBalanceUpdate(data: BalanceUpdateData) {
         return
     }
 
-    // Your logic here, e.g., update database, trigger alerts, etc.
+    // logic here, e.g., update database, trigger alerts, etc.
 }
 function mapOrderResultToExecutionReportData(orderResult: OrderResult): ExecutionReportData {
-  return {
-    e: 'executionReport', // Assuming this is a constant for execution reports
-    E: orderResult.transactTime, // EventTime
-    s: orderResult.symbol, // Symbol
-    c: orderResult.clientOrderId, // ClientOrderId
-    S: orderResult.side as "BUY" | "SELL", // Side
-    o: orderResult.type as "LIMIT" | "MARKET" | "STOP_LOSS" | "STOP_LOSS_LIMIT" | "TAKE_PROFIT" | "TAKE_PROFIT_LIMIT" | "LIMIT_MAKER", // Order type
-    f: '', // Assuming this field doesn't map directly
-    q: orderResult.origQty, // Original quantity
-    p: orderResult.price, // Price
-    P: '', // Assuming this field doesn't map directly
-    F: '', // Assuming this field doesn't map directly
-    g: -1, // Assuming this field doesn't map directly
-    C: '', // Assuming this field doesn't map directly
-    x: orderResult.status as "NEW" | "PARTIALLY_FILLED" | "FILLED" | "CANCELED" | "PENDING_CANCEL" | "REJECTED" | "EXPIRED", // Order status
-    X: '', // Assuming this field doesn't map directly
-    r: '', // Assuming this field doesn't map directly
-    i: orderResult.orderId, // OrderId
-    l: '', // Assuming this field doesn't map directly
-    z: '', // Assuming this field doesn't map directly
-    L: '', // Assuming this field doesn't map directly
-    n: '', // Assuming this field doesn't map directly
-    N: '', // Assuming this field doesn't map directly
-    T: orderResult.transactTime, // Assuming this maps to transactTime
-    t: 0, // Assuming this field doesn't map directly
-    I: 0, // Assuming this field doesn't map directly
-    w: false, // Assuming this field doesn't map directly
-    m: false, // Assuming this field doesn't map directly
-    M: false, // Assuming this field doesn't map directly
-    O: 0, // Assuming this field doesn't map directly
-    Z: '', // Assuming this field doesn't map directly
-    Y: '', // Assuming this field doesn't map directly
-    Q: '', // Assuming this field doesn't map directly
-    W: '', // Assuming this field doesn't map directly
-    V: ''  // Assuming this field doesn't map directly
-  };
+    return {
+        e: "executionReport", // Assuming this is a constant for execution reports
+        E: orderResult.transactTime, // EventTime
+        s: orderResult.symbol, // Symbol
+        c: orderResult.clientOrderId, // ClientOrderId
+        S: orderResult.side as "BUY" | "SELL", // Side
+        o: orderResult.type as
+            | "LIMIT"
+            | "MARKET"
+            | "STOP_LOSS"
+            | "STOP_LOSS_LIMIT"
+            | "TAKE_PROFIT"
+            | "TAKE_PROFIT_LIMIT"
+            | "LIMIT_MAKER", // Order type
+        f: "", // Assuming this field doesn't map directly
+        q: orderResult.origQty, // Original quantity
+        p: orderResult.price, // Price
+        P: "", // Assuming this field doesn't map directly
+        F: "", // Assuming this field doesn't map directly
+        g: -1, // Assuming this field doesn't map directly
+        C: "", // Assuming this field doesn't map directly
+        x: orderResult.status as
+            | "NEW"
+            | "PARTIALLY_FILLED"
+            | "FILLED"
+            | "CANCELED"
+            | "PENDING_CANCEL"
+            | "REJECTED"
+            | "EXPIRED", // Order status
+        X: "", // Assuming this field doesn't map directly
+        r: "", // Assuming this field doesn't map directly
+        i: orderResult.orderId, // OrderId
+        l: "", // Assuming this field doesn't map directly
+        z: "", // Assuming this field doesn't map directly
+        L: "", // Assuming this field doesn't map directly
+        n: "", // Assuming this field doesn't map directly
+        N: "", // Assuming this field doesn't map directly
+        T: orderResult.transactTime, // Assuming this maps to transactTime
+        t: 0, // Assuming this field doesn't map directly
+        I: 0, // Assuming this field doesn't map directly
+        w: false, // Assuming this field doesn't map directly
+        m: false, // Assuming this field doesn't map directly
+        M: false, // Assuming this field doesn't map directly
+        O: 0, // Assuming this field doesn't map directly
+        Z: "", // Assuming this field doesn't map directly
+        Y: "", // Assuming this field doesn't map directly
+        Q: "", // Assuming this field doesn't map directly
+        W: "", // Assuming this field doesn't map directly
+        V: "", // Assuming this field doesn't map directly
+    }
 }
-
 
 export async function handleOrderResponse(data: OrderResponse) {
-  if (data.status === 200 && data.result && Object.keys(data.result).length > 0) {
-    console.log("Data to be saved:", data.result);
-    const newOrder = new OrderModel(data.result);
-    try {
-      const savedEntry = await newOrder.save();
-      console.log("Saved entry with ID:", savedEntry._id);
-    } catch (err) {
-      console.log('An error occurred:', err);
+    if (data.status === 200 && data.result && Object.keys(data.result).length > 0) {
+        console.log("Data to be saved:", data.result)
+        const newOrder = new OrderModel(data.result)
+        try {
+            const savedEntry = await newOrder.save()
+            console.log("Saved entry with ID:", savedEntry._id)
+        } catch (err) {
+            console.log("An error occurred:", err)
+        }
+    } else {
+        console.log("Received an OrderResponse with an error status or empty result:", data.status)
     }
-  } else {
-    console.log('Received an OrderResponse with an error status or empty result:', data.status);
-  }
 }
-
-
 
 // Function to handle 'executionReport' event
 export async function handleExecutionReport(data: ExecutionReportData) {
@@ -196,19 +209,23 @@ export async function handleExecutionReport(data: ExecutionReportData) {
     const orderRejectReason = data.r
     const orderId = data.i
 
-    // Your logic here, e.g., update database, trigger alerts, etc.
+    //  logic here, e.g., update database, trigger alerts, etc.
 
     if (orderStatus !== "NEW") {
-      // Handle all statuses except "NEW"
-      if (orderStatus === "FILLED" || orderStatus === "CANCELED" || orderStatus === "REJECTED" || orderStatus === "TRADE") {
-        await updateOrderInDatabase(data, orderStatus);
-      } else if (orderStatus === "EXPIRED") {
-        // Handle expired orders
-        // Your logic here
-      } else {
-        console.error("Unknown order status:", orderStatus);
-      }
-    
+        // Handle all statuses except "NEW"
+        if (
+            orderStatus === "FILLED" ||
+            orderStatus === "CANCELED" ||
+            orderStatus === "REJECTED" ||
+            orderStatus === "TRADE"
+        ) {
+            await updateOrderInDatabase(data, orderStatus)
+        } else if (orderStatus === "EXPIRED") {
+            // Handle expired orders
+            //  logic here
+        } else {
+            console.error("Unknown order status:", orderStatus)
+        }
     }
 }
 // Function to handle 'listStatus' event (for OCO orders)
@@ -224,7 +241,7 @@ function handleListStatus(data: ListStatusData) {
     const listOrderStatus = data.L
     const listRejectReason = data.r
 
-    // Your logic here, e.g., update database, trigger alerts, etc.
+    //  logic here, e.g., update database, trigger alerts, etc.
     if (listOrderStatus === "EXECUTING") {
         // Handle executing lists
     } else if (listOrderStatus === "ALL_DONE") {
@@ -275,16 +292,17 @@ export async function userDataReportWebsocket(
     wsClient: WebSocket,
     testApiKey: string,
     testApiSecret: string,
-    wsTestURL: string,
+    streamUrl: string,
     requestId: string,
 ) {
+    console.log("inside userDataReportWebsocket")
     if (!testApiKey || !testApiSecret) {
         console.error("No test API key or secret provided")
         wsClient.send("No test API key or secret provided")
         return
     }
 
-    // Generate listenKey using your API (this part depends on how you've set up API calls)
+    // Generate listenKey using API (this part depends on how you've set up API calls)
     const listenKey = await getDataStreamListenKey()
 
     if (!listenKey) {
@@ -294,50 +312,45 @@ export async function userDataReportWebsocket(
     }
 
     // Create WebSocket URL for user data stream
-    const wsUserDataUrl = `${wsTestURL}/${listenKey}`
+    const wsUserDataUrl = `${streamUrl}/${listenKey}`
 
     // Create a new BinanceStreamManager for the user data stream
     const binanceStreamManager = new BinanceStreamManager(wsUserDataUrl)
-    console.log("connection  to user data stream opened")
-    // Add a listener to handle incoming user data
-    binanceStreamManager.on("message", (data: any) => {
-        const eventType = data.e // Event type
+    console.log("Connection to user data stream opened")
 
-        switch (eventType) {
-            case "outboundAccountPosition":
-                handleOutboundAccountPosition(data)
-                break
-            case "balanceUpdate":
-                handleBalanceUpdate(data)
-                break
-            case "executionReport":
-                handleExecutionReport(data)
-                break
-            case "listStatus":
-                handleListStatus(data)
-                break
-            default:
-                console.log("Unknown event type:", eventType)
-        }
-
-        if (wsClient.readyState === WebSocket.OPEN) {
-          console.log("wsClient is open. Sending user data report .", data)
-            wsClient.send(JSON.stringify(data))
-        } else {
-            console.log("wsClient is not open. Cannot send user data.")
-        }
+    binanceStreamManager.on("open", () => {
+        console.log("Connection to user data report stream opened")
     })
 
-    // Function to handle 'outboundAccountPosition' event
+    // Add specific listeners for different types of user data
+    binanceStreamManager.on("executionReport", (data) => {
+        console.log("Received execution report:", data)
+        handleExecutionReport(data)
+        wsClient.send(JSON.stringify(data))
+    })
+
+    binanceStreamManager.on("outboundAccountPosition", (data) => {
+        console.log("Received outbound account position:", data)
+        handleOutboundAccountPosition(data)
+        wsClient.send(JSON.stringify(data))
+    })
+
+    binanceStreamManager.on("balanceUpdate", (data) => {
+        console.log("Received balance update:", data)
+        handleBalanceUpdate(data)
+        wsClient.send(JSON.stringify(data))
+    })
 
     // Handle errors
     binanceStreamManager.on("error", (error: any) => {
-        console.error("User Data Websocket error:", JSON.stringify(error))
+        console.error("User Data Websocket error:", JSON.stringify(error.message))
+        wsClient.send(JSON.stringify(error.message))
     })
 
     // Handle close events
     binanceStreamManager.on("close", (code: number, reason: string) => {
         console.log(`WebSocket connection to user data closed, code: ${code}, reason: ${reason}`)
+        wsClient.send(`WebSocket connection to user data closed, code: ${code}, reason: ${reason}`)
     })
 }
 
@@ -398,7 +411,7 @@ export async function userInfoWebsocket(
 
 // New Order
 
-//order info
+//Order info
 export async function orderStatusWebsocket(
     wsClient: WebSocket,
     wsTestURL: string,
@@ -547,7 +560,7 @@ export function priceFeedWebsocket(
 ) {
     const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
     const symbol = parsedUrl.searchParams.get("symbol")?.toUpperCase()
-    const timeframes = parsedUrl.searchParams.get("timeframes")?.split(",") || ["1s"] // Default to 1s if not provided
+    const timeframes = parsedUrl.searchParams.get("timeframes")?.split(",") || ["1s"]
 
     let streamID = 1
     if (!symbol) {
@@ -560,7 +573,8 @@ export function priceFeedWebsocket(
         const wsPriceFeed = `${streamUrl}/${listenkey}/${symbol.toLowerCase()}@kline_${timeframe}`
         const binanceStreamManager = new BinanceStreamManager(wsPriceFeed)
 
-        binanceStreamManager.addListener(`${symbol}`, (data: PriceFeedMessage) => {
+        // Listen for kline messages
+        binanceStreamManager.on("kline", (data) => {
             console.log(`Received price feed data for ${timeframe}:`, data)
 
             if (wsClient.readyState === WebSocket.OPEN) {
@@ -576,11 +590,12 @@ export function priceFeedWebsocket(
         })
 
         // Handle close events
-        binanceStreamManager.addListener("close", (code: number, reason: string) => {
+        binanceStreamManager.on("close", (code: number, reason: string) => {
             console.log(
                 `WebSocket connection to price feed closed, code: ${code}, reason: ${reason}`,
             )
         })
+
         // Subscribe to the kline stream for the given symbol and timeframe
         binanceStreamManager.subscribeToStream(
             "kline",
