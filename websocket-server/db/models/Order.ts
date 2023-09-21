@@ -10,6 +10,7 @@ export interface IFill {
 }
 
 export interface IOrder extends Document {
+    exchangeId: string
     symbol: string
     orderId: number
     orderListId: number
@@ -37,6 +38,7 @@ const fillSchema = new Schema<IFill>({
 })
 
 export const orderSchema = new Schema({
+    exchangeId: { type: String, index: true },
     symbol: { type: String, index: true },
     orderId: { type: Number, index: true },
     orderListId: Number,
@@ -54,7 +56,7 @@ export const orderSchema = new Schema({
     selfTradePreventionMode: String,
     fills: [fillSchema],
 })
-orderSchema.index({ orderId: 1, symbol: 1, status: 1 })
+orderSchema.index({ exchangeId: 1,orderId: 1, symbol: 1, status: 1 })
 
 const isTestEnv = process.env.NODE_ENV === "test"
 console.log("isTestEnv", isTestEnv)

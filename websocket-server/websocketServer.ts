@@ -4,16 +4,10 @@ import {
     getDataStreamListenKey,
     cancelOrder /* getOrderStatusFromBinance */,
 } from "./services/binanceService"
-import { eventEmitter } from "./events/eventEmitter"
 import { OrderModel } from "./db/models/Order"
 import {
     sleep,
-    setupWebSocket,
-    WebsocketManager,
-    generateDate,
-    HandleApiErrors,
-    generateBinanceSignature,
-    BinanceStreamManager,
+ 
 } from "./utils/utils"
 import dotenv from "dotenv"
 dotenv.config({ path: ".env.test" })
@@ -308,6 +302,7 @@ async function fetchAllOrdersFromMongo() {
     }
 }
 
+
 // fetchAllOrdersFromMongo()
 // .then((orders) => {
 //   orders && orders.map((dbOrder) => {
@@ -372,7 +367,7 @@ export async function setupWebSocketServer(server: http.Server) {
         const orderController = new OrderController(wsClient, wsTestURL, requestId, testApiSecret)
 
         // Check if the request URL is '/exchangeInfo'
-        if (req.url === "/exchangeInfo") {
+        if (req.url === "/binanceExchangeInfo") {
             console.log("Inside exchangeInfo condition")
             if (wsTestURL) {
                 exchangeInfoWebsocket(wsClient, wsTestURL, requestId)
@@ -382,7 +377,7 @@ export async function setupWebSocketServer(server: http.Server) {
             }
             // Test message to confirm data sending
             // wsClient.send('Test exchangeInfo message');
-        } else if (req.url?.startsWith("/userDataReport")) {
+        } else if (req.url?.startsWith("/binanceUserDataReport")) {
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
                 wsClient.send("No test API key or secret provided")
@@ -394,7 +389,7 @@ export async function setupWebSocketServer(server: http.Server) {
             } else {
                 userDataReportWebsocket(wsClient, testApiKey, testApiSecret, wsTestURL, requestId)
             }
-        } else if (req.url?.startsWith("/userInfo")) {
+        } else if (req.url?.startsWith("/binanceUserInfo")) {
             if (!testApiKey || !testApiSecret) {
                 console.error("No test API key or secret provided")
                 wsClient.send("No test API key or secret provided")
@@ -406,7 +401,7 @@ export async function setupWebSocketServer(server: http.Server) {
                     userInfoWebsocket(wsClient, wsTestURL, testApiKey, testApiSecret, requestId)
                 }
             }
-        } else if (req.url?.startsWith("/orderStatus")) {
+        } else if (req.url?.startsWith("/binanceOrderStatus")) {
             console.log("Inside orderStatus condition")
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
@@ -426,7 +421,7 @@ export async function setupWebSocketServer(server: http.Server) {
                     )
                 }
             }
-        } else if (req.url?.startsWith("/allOrders")) {
+        } else if (req.url?.startsWith("/binanceAllOrders")) {
             console.log("Inside orderStatus condition")
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
@@ -446,7 +441,7 @@ export async function setupWebSocketServer(server: http.Server) {
                     )
                 }
             }
-        } else if (req.url?.startsWith("/priceFeed")) {
+        } else if (req.url?.startsWith("/binancePriceFeed")) {
             console.log("Inside priceFeed condition")
             if (!streamUrl) {
                 console.error("Incorrect WebSocket URL provided")
@@ -454,7 +449,7 @@ export async function setupWebSocketServer(server: http.Server) {
             } else {
                 priceFeedWebsocket(wsClient, streamUrl, req, listenkey)
             }
-        } else if (req.url?.startsWith("/marketOrder")) {
+        } else if (req.url?.startsWith("/binanceMarketOrder")) {
             console.log("Inside marketOrder condition")
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
@@ -505,7 +500,7 @@ export async function setupWebSocketServer(server: http.Server) {
                     }
                 }
             }
-        } else if (req.url?.startsWith("/limitOrder")) {
+        } else if (req.url?.startsWith("/binancelimitOrder")) {
             console.log("Inside limitOrder condition")
 
             if (!testApiKey || !testApiSecret) {
@@ -558,9 +553,9 @@ export async function setupWebSocketServer(server: http.Server) {
                     // Create an instance of OrderController
                 }
             }
-        } else if (req.url?.startsWith("/ocoOrder")) {
-        } else if (req.url?.startsWith("/cancelOrder")) {
-        } else if (req.url?.startsWith("/trades")) {
+        } else if (req.url?.startsWith("/binanceOcoOrder")) {
+        } else if (req.url?.startsWith("/binanceCancelOrder")) {
+        } else if (req.url?.startsWith("/binanceTrades")) {
         } else if (req.url?.startsWith("/")) {
         } else if (req.url?.startsWith("/")) {
         } else if (req.url?.startsWith("/")) {

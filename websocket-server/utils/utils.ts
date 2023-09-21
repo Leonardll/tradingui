@@ -13,6 +13,8 @@ import {
 import { request } from "http"
 import { ExecutionReportData } from "../websocketServer"
 import { OrderModel } from "../db/models/Order"
+import { ExchangeModel, IExchangeInfo } from '../db/models/Exchange';
+
 import { type } from "os"
 export type StreamCallback = (data: StreamPayload) => void
 
@@ -1123,3 +1125,19 @@ export class OrderController {
     async handleBinanceCancelOcoOrder() {}
     async handleBinanceReplaceOrder() {}
 }
+
+
+export const updateExchangeInfoInDB = async (userId: string, exchangeName: string, exchangeInfo: IExchangeInfo) => {
+    console.log("Attempting to update DB with:", userId, exchangeName, exchangeInfo);
+    try {
+        await ExchangeModel.findOneAndUpdate(
+            { userId, exchangeName },
+            { $set: { exchangeInfo } },
+            { upsert: true }
+        );
+        console.log("Successfully updated DB.");
+    } catch (err) {
+        console.error("Failed to update DB:", err);
+    }
+};
+

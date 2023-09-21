@@ -4,6 +4,8 @@ import {
     generateDate,
     generateBinanceSignature,
     ParamsType,
+    updateExchangeInfoInDB,
+    generateRandomId,
 } from "../../utils/utils"
 import WebSocket from "ws"
 import { getDataStreamListenKey, updateOrderInDatabase } from "../binanceService"
@@ -18,7 +20,7 @@ import {
     ExecutionReportData,
 } from "../../websocketServer"
 import { OrderModel } from "../../db/models/Order"
-import { isConstructorDeclaration } from "typescript"
+import { IExchangeInfo } from "../../db/models/Exchange"
 /**
  * Initialize and manage WebSocket connection for exchange info.
  * @param wsTestURL - The WebSocket test URL for the exchange.
@@ -183,7 +185,11 @@ function mapOrderResultToExecutionReportData(orderResult: OrderResult): Executio
 export async function handleOrderResponse(data: OrderResponse) {
     if (data.status === 200 && data.result && Object.keys(data.result).length > 0) {
         console.log("Data to be saved:", data.result)
-        const newOrder = new OrderModel(data.result)
+        const orderDataWithExchangeId = {
+            ...data.result,
+            exchangeId: "binance",
+        }
+        const newOrder = new OrderModel(orderDataWithExchangeId)
         try {
             const savedEntry = await newOrder.save()
             console.log("Saved entry with ID:", savedEntry._id)
@@ -262,19 +268,64 @@ export function exchangeInfoWebsocket(
     wsExchangeInfoManager.on("open", () => {
         console.log("Connection to exchange info opened")
     })
+    let lastExchangeInfo: IExchangeInfo | null = null;
 
-    wsExchangeInfoManager.on("message", async (data: string | Buffer) => {
-        console.log("Received message from exchange:", data)
-
-        if (wsClient.readyState === WebSocket.OPEN) {
-            console.log("wsClient exchange info is open. Sending data.", data)
-
-            // Forward this data to the client
-            wsClient.send(JSON.stringify(data))
-        } else {
-            console.log("wsClient is not open. Cannot send data.")
+    wsExchangeInfoManager.on("message", async (data: any) => {
+        console.log("Raw data from exchange:", data);
+        if (data && data.type === 'ping') {
+            console.log("Received a ping message, ignoring.");
+            return;
         }
-    })
+        if (wsClient.readyState === WebSocket.OPEN) {
+            console.log("wsClient exchange info is open. Sending data.", data);
+            wsClient.send(JSON.stringify(data));
+        } else {
+            console.log("wsClient is not open. Cannot send data.");
+        }
+
+        try {
+            if (data.result.length > 0) {
+
+                const newExchangeInfoData: IExchangeInfo = {
+                    // Map the fields from the raw data to your IExchangeInfo interface
+                    // For example:
+                    timezone: data.result.timezone,
+                    serverTime: data.result.serverTime,
+                    rateLimits: data.result.rateLimits,
+                    exchangeFilters: data.result.exchangeFilters,
+                    symbols: data.result.symbols,
+                    sors: data.result.sors,
+                    // ... add other fields
+                };
+                
+               if (JSON.stringify(newExchangeInfoData) !== JSON.stringify(lastExchangeInfo)) {
+                   const exchangeName = "Binance";
+                   const userId = 'leol'; // Replace with actual user ID logic
+       
+                   await updateExchangeInfoInDB(userId, exchangeName, newExchangeInfoData);
+                   console.log("Successfully updated DB.");
+       
+                   // Update lastExchangeInfo with newExchangeInfoData
+                   lastExchangeInfo = newExchangeInfoData;
+               } else {
+                   console.log("Exchange info has not changed. Skipping DB update.");
+               }
+            }
+    
+            // const exchangeName = "Binance";
+            // const userId = generateRandomId(); // Replace with actual user ID logic
+            // console.log("Data to update:", userId, exchangeName, exchangeInfoData);
+            // await updateExchangeInfoInDB(userId, exchangeName, exchangeInfoData);
+            // console.log("Successfully updated DB.");
+        } catch (err) {
+            console.error("Error updating exchange info in DB or parsing data:", err);
+        }
+    });
+    
+    
+    
+    
+    
 
     wsExchangeInfoManager.on("error", (event) => {
         console.error("Websocket error:", JSON.stringify(event))
