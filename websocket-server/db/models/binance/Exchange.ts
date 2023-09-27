@@ -17,7 +17,7 @@ interface Filter {
   stepSize?: string;
 }
 
-interface Symbol {
+export interface Symbol {
   symbol: string;
   status: string;
   baseAsset: string;

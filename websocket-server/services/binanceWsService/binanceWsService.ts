@@ -1,3 +1,10 @@
+import { IOrder } from './../../../ui/app/models/order';
+import WebSocket from "ws"
+import { getDataStreamListenKey, updateOrderInDatabase } from "../binanceService"
+import { OrderModel } from "../../db/models/binance/Order"
+import { IExchangeInfo } from "../../db/models/binance/Exchange"
+import { uploadOCOToDB } from "../../db/operations/binance/ocoOps"
+import { IOCOOrder } from "../../db/models/binance/OCOOrders"
 import {
     WebsocketManager,
     BinanceStreamManager,
@@ -7,8 +14,6 @@ import {
     updateExchangeInfoInDB,
     generateRandomId,
 } from "../../utils/utils"
-import WebSocket from "ws"
-import { getDataStreamListenKey, updateOrderInDatabase } from "../binanceService"
 import {
     PriceFeedMessage,
     EventTime,
@@ -19,8 +24,6 @@ import {
     BalanceUpdateData,
     ExecutionReportData,
 } from "../../websocketServer"
-import { OrderModel } from "../../db/models/Order"
-import { IExchangeInfo } from "../../db/models/Exchange"
 /**
  * Initialize and manage WebSocket connection for exchange info.
  * @param wsTestURL - The WebSocket test URL for the exchange.
@@ -83,6 +86,42 @@ interface OrderResponse {
     result: OrderResult
     rateLimits: RateLimit[]
 }
+
+interface RateLimit {
+    rateLimitType: string;
+    interval: string;
+    intervalNum: number;
+    limit: number;
+    count: number;
+  }
+  
+  interface OCOOrderInfo {
+    symbol: string;
+    orderId: number;
+    clientOrderId: string;
+  }
+  
+  interface OCOOrderResult extends IOrder {
+    orderListId: number;
+  }
+  
+ export  interface OCOOrderResponse {
+    id: string;
+    status: number;
+    result: {
+      orderListId: number;
+      contingencyType: string;
+      listStatusType: string;
+      listOrderStatus: string;
+      listClientOrderId: string;
+      transactionTime: number;
+      symbol: string;
+      orders: OCOOrderInfo[];
+      orderReports: OCOOrderResult[];
+    };
+    rateLimits: RateLimit[];
+  }
+  
 async function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
     console.log("Account Position Update:", data)
 
@@ -181,6 +220,20 @@ function mapOrderResultToExecutionReportData(orderResult: OrderResult): Executio
         V: "", // Assuming this field doesn't map directly
     }
 }
+
+export async function handleOCOOrderResponse(data: any) {  // Use any here
+    if (data && data.status === 200 && data.result && Object.keys(data.result).length > 0) {
+      const ocoOrderDataWithExchangeId = {
+        ...data.result,
+        exchangeId: "binance",
+      };
+      await uploadOCOToDB([ocoOrderDataWithExchangeId]);
+    } else {
+      console.log("Received an OCOOrderResponse with an error status or empty result:", data?.status);
+    }
+  }
+  
+
 
 export async function handleOrderResponse(data: OrderResponse) {
     if (data.status === 200 && data.result && Object.keys(data.result).length > 0) {
@@ -367,7 +420,6 @@ export async function userDataReportWebsocket(
 
     // Create a new BinanceStreamManager for the user data stream
     const binanceStreamManager = new BinanceStreamManager(wsUserDataUrl)
-    console.log("Connection to user data stream opened")
 
     binanceStreamManager.on("open", () => {
         console.log("Connection to user data report stream opened")
@@ -573,7 +625,7 @@ export function allOrdersWebsocket(
             console.log("Connection to order status opened")
         })
         wsAllOrder4SymbolManager.on("message", async (data: string | Buffer) => {
-            console.log("Received order status message from exchange:", data)
+            console.log("Received order status message from exchange:", data.length)
             // You can forward this data to the client if needed
 
             if (wsClient.readyState === WebSocket.OPEN) {

@@ -1,3 +1,4 @@
+import { OCOOrderModel } from './../db/models/binance/OCOOrders';
 import { on } from "events"
 import { AnyObject, set } from "mongoose"
 import { WebSocket } from "ws"
@@ -9,18 +10,20 @@ import crypto from "crypto"
 import {
     handleOrderResponse,
     handleExecutionReport,
+    handleOCOOrderResponse
+    
 } from "../services/binanceWsService/binanceWsService"
 import { request } from "http"
 import { ExecutionReportData } from "../websocketServer"
-import { OrderModel } from "../db/models/Order"
-import { ExchangeModel, IExchangeInfo } from '../db/models/Exchange';
-
-import { type } from "os"
+import { OrderModel } from "../db/models/binance/Order"
+import { ExchangeModel, IExchange, IExchangeInfo, Symbol } from '../db/models/binance/Exchange';
+import { getSymbolFilters } from '../db/operations/binance/exchangeOps';
 export type StreamCallback = (data: StreamPayload) => void
 
 interface BinanceMessage {
     stream: string
     data: any // Replace 'any' with the actual type if known
+    method:string
 }
 
 interface RateLimitInfo {
@@ -65,7 +68,7 @@ interface LimitOrderParams {
     price: string
     timeInForce: string
     timestamp: number
-    recvWindow: number
+    recvWindow?: number
     apiKey: string
     signature?: string
     icebergQty?: number
@@ -73,6 +76,26 @@ interface LimitOrderParams {
     newOrderRespType?: string
     stopPrice?: number
     workingType?: string
+}
+
+interface OCOOrderParams {
+    symbol: string
+    side: string
+    quantity: string
+    price: string
+    stopPrice: string
+    listClientOrderId?: string
+    limitClientOrderId?: string
+    stopClientOrderId?: string
+    limitIcebergQty?: string
+    stopIcebergQty?: string
+    stopLimitPrice: string
+    stopLimitTimeInForce: string
+    newOrderRespType?: string
+    timestamp: number
+    recvWindow: number
+    apiKey: string
+    signature?: string
 }
 
 interface CancelOrderParams {
@@ -119,13 +142,47 @@ interface OrderResult {
     fills?: Fill[] // Optional, as it may not be present in all responses
 }
 
+
+interface OCOOrderInfo {
+    symbol: string;
+    orderId: number;
+    clientOrderId: string;
+  }
+  
+  interface OCOOrderResult extends OrderResult {
+    orderListId: number;
+  }
+  
+  interface OCOOrderResponse {
+    id: string;
+    status: number;
+    result: {
+      orderListId: number;
+      contingencyType: string;
+      listStatusType: string;
+      listOrderStatus: string;
+      listClientOrderId: string;
+      transactionTime: number;
+      symbol: string;
+      orders: OCOOrderInfo[];
+      orderReports: OCOOrderResult[];
+    };
+    rateLimits: RateLimit[];
+  }
+
 interface OrderResponse {
     id: string
     status: number
     result: OrderResult
     rateLimits: RateLimit[]
 }
-
+interface TradeOrder {
+    side: string
+    price: string;
+    quantity: string;
+    // Add other order fields as needed
+  }
+  
 // You can then use these interfaces in code where you handle the WebSocket messages.
 
 let recvWindow: number = 50000
@@ -136,11 +193,12 @@ export function generateDate() {
 /**
  * Create a Binance API signature.
  * @param queryString - The query string to be signed.
- * @param apiSecret - The API secret key.
+ * @param testApiKey - The API secret key.
+ * @param testApiSecret - The API secret key.
  * @returns The generated signature.
  */
-export function generateBinanceSignature(queryString: string, apiSecret: string): string {
-    return crypto.createHmac("sha256", apiSecret).update(queryString).digest("hex")
+export function generateBinanceSignature(queryString: string, testApiSecret: string): string {
+    return crypto.createHmac("sha256", testApiSecret).update(queryString).digest("hex")
 }
 export function generateRandomId() {
     let randomId = uuidv4()
@@ -760,6 +818,25 @@ export class HandleApiErrors {
     static BinanceError = BinanceError
 }
 
+function isValidLotSize(quantity: string, minQty: string, maxQty: string, stepSize: string): boolean {
+    const qty = parseFloat(quantity);
+    const min = parseFloat(minQty);
+    const max = parseFloat(maxQty);
+    const step = parseFloat(stepSize);
+  console.log(qty, min, max, step, "qty, min, max, step", typeof(qty), typeof(min), typeof(max), typeof(step))
+  console.log("qty >= min:", qty >= min);  // Should be true
+  console.log("qty <= max:", qty <= max);  // Should be true
+  console.log("(qty - min) % step:", (qty - min) % step);  // Should be 0
+  
+  if (qty < min || qty > max) {
+        console.log("qty < min || qty > max", 'NOT VALID')
+      return false;
+    }
+    
+    console.log('valid')
+    return true
+   // return (qty - min) % step === 0;
+}
 async function executeMarketOrderForBinance(
     wsClient: WebSocket,
     wsTestURL: string,
@@ -771,80 +848,101 @@ async function executeMarketOrderForBinance(
     requestId: string,
     //recvWindow: number
 ) {
-    if (!testApiKey || !testApiSecret) {
-        throw new Error("Missing API credentials")
-    }
-    if (!symbol) throw new Error("Missing required parameter: symbol")
-    if (!side) throw new Error("Missing required parameter: side")
-    if (!quantity) throw new Error("Missing required parameter: quantity")
 
-    const timestamp = generateDate()
-    const queryString = `apiKey=${testApiKey}&quantity=${quantity}&recvWindow=${recvWindow}&side=${side.toUpperCase()}&symbol=${symbol.toUpperCase()}&timestamp=${timestamp}&type=MARKET`
-    console.log("queryString", queryString)
-    const signature = generateBinanceSignature(queryString, testApiSecret)
-    console.log("signature", signature)
-    const params: MarketOrderParams = {
-        symbol: symbol.toUpperCase(),
-        side: side.toUpperCase(),
-        type: "MARKET",
-        timestamp: timestamp,
-        quantity: quantity,
-        apiKey: testApiKey,
-        signature: signature,
-        recvWindow: recvWindow, // <-- Added this
-    }
-
-    const wsMarketOrderManager = new WebsocketManager(
-        `${wsTestURL}`,
-        requestId,
-        "order.place",
-        params,
-    )
-    console.log(params)
-    wsMarketOrderManager.on("open", () => {
-        console.log("Connection to Market order manager opened")
-    })
-
-    wsMarketOrderManager.on("message", async (data: string | Buffer) => {
-        console.log("Received message from market order manager", typeof data)
-        if (typeof data === "string") {
-            const parsedData = JSON.parse(data)
-        } else if (Buffer.isBuffer(data)) {
-            const parsedData = JSON.parse(data.toString())
-        } else {
-            const parsedData = data
-            console.log("Received Order Response:", JSON.stringify(parsedData, null, 2))
-
-            if ("status" in parsedData && (parsedData as any).status === 200) {
-                // This looks like an OrderResponse object with a successful status
-                await handleOrderResponse(parsedData as OrderResponse)
-            } else if ("e" in (parsedData as any)) {
-                // This looks like an ExecutionReportData object
-                await handleExecutionReport(parsedData as ExecutionReportData)
-            } else {
-                console.error("Unknown data type")
-            }
+    try {
+        if (!testApiKey || !testApiSecret) {
+            throw HandleApiErrors.BinanceError.fromCode(-1002); // Unauthorized
         }
-        if (wsClient.readyState === WebSocket.OPEN) {
-            console.log("Sending market order message to client:", data)
-
-            if (typeof data === "object") {
-                console.log(data)
-                wsClient.send(JSON.stringify(data))
-            } else {
-                console.log(data)
-                wsClient.send(JSON.stringify(data))
-            }
-        } else {
-            console.error("WebSocket is not initialized. Cannot send data")
+        if (!symbol) {
+            throw HandleApiErrors.BinanceError.fromCode(-1015); // Invalid symbol
         }
-    })
-    wsMarketOrderManager.on("error", (event) => {
-        console.error("Market Order Connection Error:", JSON.stringify(event))
-    })
-    wsMarketOrderManager.on("close", (code, reason) => {
-        console.log(`Market Order Connection closed: ${code} ${reason}`)
-    })
+        if (!side) {
+            throw HandleApiErrors.BinanceError.fromCode(-1130); // Invalid side
+        }
+        if (!quantity) {
+            throw HandleApiErrors.BinanceError.fromCode(-1017); // Invalid amount
+        }
+    
+        const timestamp = generateDate()
+        const queryString = `apiKey=${testApiKey}&quantity=${quantity}&recvWindow=${recvWindow}&side=${side.toUpperCase()}&symbol=${symbol.toUpperCase()}&timestamp=${timestamp}&type=MARKET`
+        console.log("queryString", queryString)
+        const signature = generateBinanceSignature(queryString, testApiSecret)
+        console.log("signature", signature)
+        const params: MarketOrderParams = {
+            symbol: symbol.toUpperCase(),
+            side: side.toUpperCase(),
+            type: "MARKET",
+            timestamp: timestamp,
+            quantity: quantity,
+            apiKey: testApiKey,
+            signature: signature,
+            recvWindow: recvWindow, // <-- Added this
+        }
+    
+        const wsMarketOrderManager = new WebsocketManager(
+            `${wsTestURL}`,
+            requestId,
+            "order.place",
+            params,
+        )
+        console.log(params)
+        wsMarketOrderManager.on("open", () => {
+            console.log("Connection to Market order manager opened")
+        })
+    
+        wsMarketOrderManager.on("message", async (data: string | Buffer) => {
+            console.log("Received message from market order manager", typeof data)
+            if (typeof data === "string") {
+                const parsedData = JSON.parse(data)
+            } else if (Buffer.isBuffer(data)) {
+                const parsedData = JSON.parse(data.toString())
+            } else {
+                const parsedData = data
+                console.log("Received Order Response:", JSON.stringify(parsedData, null, 2))
+    
+                if ("status" in parsedData && (parsedData as any).status === 200) {
+                    // This looks like an OrderResponse object with a successful status
+                    await handleOrderResponse(parsedData as OrderResponse)
+                } else if ("e" in (parsedData as any)) {
+                    // This looks like an ExecutionReportData object
+                    await handleExecutionReport(parsedData as ExecutionReportData)
+                } else {
+                    console.error("Unknown data type")
+                }
+            }
+            if (wsClient.readyState === WebSocket.OPEN) {
+                console.log("Sending market order message to client:", data)
+    
+                if (typeof data === "object") {
+                    console.log(data)
+                    wsClient.send(JSON.stringify(data))
+                } else {
+                    console.log(data)
+                    wsClient.send(JSON.stringify(data))
+                }
+            } else {
+                console.error("WebSocket is not initialized. Cannot send data")
+            }
+        })
+        wsMarketOrderManager.on("error", (event) => {
+            console.error("Market Order Connection Error:", JSON.stringify(event))
+        })
+        wsMarketOrderManager.on("close", (code, reason) => {
+            console.log(`Market Order Connection closed: ${code} ${reason}`)
+        })
+    } catch (error) {
+        console.error("An error occurred:", error);
+        if (error instanceof HandleApiErrors.BinanceError) {
+            // Handle Binance-specific errors
+            console.error(`Binance Error: ${error.code} - ${error.message}`);
+        } else {
+            // Handle other errors
+            console.error("Unknown Error:", error);
+        }
+    }
+        
+    
+
 }
 
 async function cancelMarkOrderForBinance(
@@ -866,7 +964,7 @@ async function cancelMarkOrderForBinance(
     if (!orderId) {
         throw HandleApiErrors.BinanceError.fromCode(-1014) // Replace with actual error code
     }
-    const queryString = `apikey=${testApiKey}&recvWindow=${recvWindow}&symbol=${symbol}&orderId=${orderId}&newClientOrderId=false&timestamp=${timestamp}`
+    const queryString = `apikey=${testApiKey}&newClientOrderId=false&orderId=${orderId}&recvWindow=${recvWindow}&symbol=${symbol}&timestamp=${timestamp}`
     const signature = generateBinanceSignature(queryString, testApiSecret)
     const params: CancelOrderParams = {
         symbol: symbol,
@@ -927,103 +1025,274 @@ async function executeLimitOrderForBinance(
     newOrderRespType?: string,
     stopPrice?: number,
     workingType?: string,
+    
     // ... other optional params
 ) {
-    if (!testApiKey || !testApiSecret) {
-        throw new Error("Missing API credentials")
+
+    let exchangeName = 'Binance'
+    const exchange: IExchange | null = await ExchangeModel.findOne({exchangeName: exchangeName});
+    if (!exchange || !exchange.exchangeInfo) {
+      throw new Error('Could not fetch exchange info');
     }
+
+    const tradingPairFilters: Symbol | null = await getSymbolFilters(exchangeName, symbol);
+
+  if (!tradingPairFilters) {
+    throw new Error('Could not fetch trading pair filters');
+  }
+
+  
+
+  // Create a TradeOrder object to validate
+  const tradeOrder: TradeOrder = {
+    price,
+    side,
+    quantity: quantity,
+    // ... (other fields)
+  };
+
+  // Validate the order using isValidLotSize
+  // Validate the order using isValidLotSize
+if (tradingPairFilters) {
+    const symbolFilters = await getSymbolFilters(exchangeName, symbol);
+  
+    if (symbolFilters) {
+      const lotSizeFilter = symbolFilters.filters.find(filter => filter.filterType === 'LOT_SIZE');
+      console.log(lotSizeFilter, "lotSizeFilter");
+      if (lotSizeFilter) {
+        const { minQty, maxQty, stepSize } = lotSizeFilter;
+        console.log(quantity, minQty, maxQty, stepSize, "Arguments before calling isValidLotSize");
+        console.trace("About to call isValidLotSize");
+        console.log("Before calling isValidLotSize:", quantity, minQty, maxQty, stepSize);
+
+        const isValid = isValidLotSize(quantity, minQty!, maxQty!, stepSize!);
+        console.log("isValid immediately after function call:", isValid);
+                
+        if (!isValid) {
+          throw new Error('Invalid order size in isValid check'); // Differentiated error message
+        }
+      } else {
+        console.log("No LOT_SIZE filter found");
+      }
+    } else {
+      console.log("No symbol filters found");
+    }
+    
+    console.log(tradeOrder, tradingPairFilters);
+  } else {
+    throw new Error('Invalid order size after logging tradeOrder and tradingPairFilters'); // Differentiated error message
+  }
+  
+    console.log('before if blocks checks')
+            if (!testApiKey || !testApiSecret) {
+            throw new Error("Missing API credentials")
+        }
     if (!symbol) throw new Error("Missing required parameter: symbol")
     if (!side) throw new Error("Missing required parameter: side")
     if (!quantity) throw new Error("Missing required parameter: quantity")
     if (!price) throw new Error("Missing required parameter: price")
     const timestamp = generateDate()
     //let queryString = `apiKey=${testApiKey}&price=${price}&quantity=${quantity}&recvWindow=${recvWindow}&side=${side.toUpperCase()}&symbol=${symbol.toUpperCase()}&timestamp=${timestamp}&timeInForce=GTC&type=LIMIT`
-
-    const params: LimitOrderParams = {
-        symbol: symbol.toUpperCase(),
-        side: side.toUpperCase(),
-        type: "LIMIT",
-        timeInForce: "GTC",
-        price: price,
-        quantity: quantity,
-        ...(icebergQty !== undefined ? { icebergQty } : {}),
-        ...(newClientOrderId !== undefined ? { newClientOrderId } : {}),
-        ...(newOrderRespType !== undefined ? { newOrderRespType } : {}),
-        ...(stopPrice !== undefined ? { stopPrice } : {}),
-        ...(workingType !== undefined ? { workingType } : {}),
-        apiKey: testApiKey,
-        signature: "",
-        recvWindow: recvWindow,
-        timestamp: timestamp,
-        // ... conditionally add other optional params
-    }
-
-    const paramsWithoutSignature = { ...params }
-    delete paramsWithoutSignature.signature
-    //const paramsCopy = JSON.parse(JSON.stringify(params)) as LimitOrderParams;
-
-    const sortedKeys = Object.keys(paramsWithoutSignature).sort()
-    console.log(sortedKeys, "sortedKeys")
-    const queryString = sortedKeys.map((key) => `${key}=${(params as any)[key]}`).join("&")
-    console.log("queryString", queryString)
-    let signature = generateBinanceSignature(queryString, testApiSecret)
-    params.signature = signature
-
-    const wsLimitOrderManager = new WebsocketManager(
-        `${wsTestURL}`,
-        requestId,
-        "order.place",
-        params,
-    )
-    wsLimitOrderManager.on("open", () => {
-        console.log("Connection to limit order manager opened")
-    })
-
-    wsLimitOrderManager.on("message", async (data: string | Buffer) => {
-        console.log("Received message from limit order manager", data)
-
-        let parsedData: any // Declare parsedData here
-
-        if (typeof data === "string") {
-            parsedData = JSON.parse(data)
-        } else if (Buffer.isBuffer(data)) {
-            parsedData = JSON.parse(data.toString())
-        } else {
-            parsedData = data
+        
+        const params: LimitOrderParams = {
+            symbol: symbol.toUpperCase(),
+            side: side.toUpperCase(),
+            type: "LIMIT",
+            timeInForce: "GTC",
+            price: price,
+            quantity: quantity,
+            ...(icebergQty !== undefined ? { icebergQty } : {}),
+            ...(newClientOrderId !== undefined ? { newClientOrderId } : {}),
+            ...(newOrderRespType !== undefined ? { newOrderRespType } : {}),
+            ...(stopPrice !== undefined ? { stopPrice } : {}),
+            ...(workingType !== undefined   ? { workingType } : {}),
+            apiKey: testApiKey,
+            signature: "",
+           recvWindow: recvWindow,
+            timestamp: timestamp,
+            // ... conditionally add other optional params
         }
-
-        console.log("Received Order Response:", JSON.stringify(parsedData, null, 2))
-
-        if ("status" in parsedData && parsedData.status === 200) {
-            // This looks like an OrderResponse object with a successful status
-            await handleOrderResponse(parsedData as OrderResponse) // You can define handleOrderResponse function
-        } else if ("e" in parsedData) {
-            // This looks like an ExecutionReportData object
-            await handleExecutionReport(parsedData as ExecutionReportData) // You can define handleExecutionReport function
-        } else {
-            console.error("Unknown data type")
-        }
-
-        if (wsClient.readyState === WebSocket.OPEN) {
-            console.log("Sending limit order message to client:", data)
-
-            if (typeof data === "object") {
-                wsClient.send(JSON.stringify(data))
+    
+        const paramsWithoutSignature = { ...params }
+        delete paramsWithoutSignature.signature
+        //const paramsCopy = JSON.parse(JSON.stringify(params)) as LimitOrderParams;
+    
+        const sortedKeys = Object.keys(paramsWithoutSignature).sort()
+        console.log(sortedKeys, "sortedKeys")
+        const queryString = sortedKeys.map((key) => `${key}=${(params as any)[key]}`).join("&")
+        console.log("queryString", queryString)
+        let signature = generateBinanceSignature(queryString, testApiSecret)
+        params.signature = signature
+    
+        const wsLimitOrderManager = new WebsocketManager(
+            `${wsTestURL}`,
+            requestId,
+            "order.place",
+            params,
+        )
+        wsLimitOrderManager.on("open", () => {
+            console.log("Connection to limit order manager opened")
+            wsClient.send(JSON.stringify(params))
+        })
+    
+        wsLimitOrderManager.on("message", async (data: string | Buffer) => {
+            console.log("Received message from limit order manager", data)
+    
+            let parsedData: any // Declare parsedData here
+    
+            if (typeof data === "string") {
+                parsedData = JSON.parse(data)
+            } else if (Buffer.isBuffer(data)) {
+                parsedData = JSON.parse(data.toString())
             } else {
-                wsClient.send(JSON.stringify(data))
+                parsedData = data
             }
-        } else {
-            console.error("WebSocket is not initialized. Cannot send data")
-        }
-    })
-
-    wsLimitOrderManager.on("error", (event) => {
-        console.error("Limit Order Connection Error:", JSON.stringify(event))
-    })
-    wsLimitOrderManager.on("close", (code, reason) => {
-        console.log(`Limit Order Connection closed: ${code} ${reason}`)
-    })
+    
+            console.log("Received Order Response:", JSON.stringify(parsedData, null, 2))
+    
+            if ("status" in parsedData && parsedData.status === 200) {
+                // This looks like an OrderResponse object with a successful status
+                await handleOrderResponse(parsedData as OrderResponse) // You can define handleOrderResponse function
+            } else if ("e" in parsedData) {
+                // This looks like an ExecutionReportData object
+                await handleExecutionReport(parsedData as ExecutionReportData) // You can define handleExecutionReport function
+            } else {
+                console.error("Unknown data type")
+            }
+    
+            if (wsClient.readyState === WebSocket.OPEN) {
+                console.log("Sending limit order message to client:", data)
+    
+                if (typeof data === "object") {
+                    wsClient.send(JSON.stringify(data))
+                } else {
+                    wsClient.send(JSON.stringify(data))
+                }
+            } else {
+                console.error("WebSocket is not initialized. Cannot send data")
+            }
+        })
+    
+        wsLimitOrderManager.on("error", (event) => {
+            console.error("Limit Order Connection Error:", JSON.stringify(event))
+        })
+        wsLimitOrderManager.on("close", (code, reason) => {
+            console.log(`Limit Order Connection closed: ${code} ${reason}`)
+        })
 }
+async function executeOCOForBinance(
+    wsClient: WebSocket,
+    wsTestURL: string,
+    testApiKey: string,
+    testApiSecret: string,
+    symbol: string,
+    side: string,
+    price: string,
+    quantity: string,
+    stopPrice: string,
+    stopLimitPrice: string,
+    requestId: string,
+    recvWindow: number
+) {
+    try {
+        if (!testApiKey || !testApiSecret) {
+            throw HandleApiErrors.BinanceError.fromCode(-1002); // Unauthorized
+        }
+        if (!symbol || !side || !quantity || !price || !stopPrice || !stopLimitPrice) {
+            throw HandleApiErrors.BinanceError.fromCode(-1015); // Invalid parameters
+        }
+
+        const timestamp = generateDate();
+        const params: OCOOrderParams = {
+            symbol: symbol.toUpperCase(),
+            side: side.toUpperCase(),
+            price: price,
+            quantity: quantity,
+            stopPrice: stopPrice,
+            stopLimitPrice: stopLimitPrice,
+            stopLimitTimeInForce: "GTC",
+            apiKey: testApiKey,
+            signature: "",
+            recvWindow: recvWindow,
+            timestamp: timestamp,
+        };
+
+        const paramsWithoutSignature = { ...params };
+        delete paramsWithoutSignature.signature;
+
+        const sortedKeys = Object.keys(paramsWithoutSignature).sort();
+        const queryString = sortedKeys.map((key) => `${key}=${(params as any)[key]}`).join("&");
+        const signature = generateBinanceSignature(queryString, testApiSecret);
+        params.signature = signature;
+        console.log(queryString)
+        const wsOCOOrderManager = new WebsocketManager(
+            `${wsTestURL}`,
+            requestId,
+            "orderList.place",
+            params,
+        );
+    console.log(params)
+        wsOCOOrderManager.on("open", () => {
+            console.log("Connection to OCO order manager opened");
+        });
+
+        wsOCOOrderManager.on("message", async (data: string | Buffer) => {
+            console.log("Received message from OCO order manager", data);
+        
+            let parsedData: any; // Declare parsedData here
+        
+            if (typeof data === "string") {
+                parsedData = JSON.parse(data);
+            } else if (Buffer.isBuffer(data)) {
+                parsedData = JSON.parse(data.toString());
+            } else {
+                parsedData = data;
+            }
+        
+            console.log("Received OCO Order Response:", JSON.stringify(parsedData, null, 2));
+        
+            if ("status" in parsedData && parsedData.status === 200) {
+                // This looks like an OCO Order Response object with a successful status
+                await handleOCOOrderResponse(parsedData as OCOOrderResponse); // You can define handleOCOOrderResponse function
+            } else if ("e" in parsedData) {
+                // This looks like an ExecutionReportData object
+                await handleExecutionReport(parsedData as ExecutionReportData); // You can define handleExecutionReport function
+            } else {
+                console.error("Unknown data type");
+            }
+        
+            if (wsClient.readyState === WebSocket.OPEN) {
+                console.log("Sending OCO order message to client:", data);
+        
+                if (typeof data === "object") {
+                    wsClient.send(JSON.stringify(data));
+                } else {
+                    wsClient.send(JSON.stringify(data));
+                }
+            } else {
+                console.error("WebSocket is not initialized. Cannot send data");
+            }
+        });
+        
+
+        wsOCOOrderManager.on("error", (event) => {
+            console.error("OCO Order Connection Error:", JSON.stringify(event));
+        });
+
+        wsOCOOrderManager.on("close", (code, reason) => {
+            console.log(`OCO Order Connection closed: ${code} ${reason}`);
+        });
+
+    } catch (error) {
+        console.error("An error occurred:", error);
+        if (error instanceof HandleApiErrors.BinanceError) {
+            console.error(`Binance Error: ${error.code} - ${error.message}`);
+        } else {
+            console.error("Unknown Error:", error);
+        }
+    }
+}
+
 
 export class OrderController {
     wsClient: WebSocket
@@ -1104,7 +1373,35 @@ export class OrderController {
     async handleBinanceStopLossLimitOrder() {}
     async handleBinanceTakeProfitOrder() {}
     async handleBinanceTakeProfitLimitOrder() {}
-    async handleBinanceLimitOcoOrder() {}
+    async handleBinanceLimitOcoOrder(
+        wsClient: WebSocket,
+        symbol: string,
+        side: string,
+        quantity: string,
+        price: string,
+        stopPrice: string,
+        stopLimitPrice: string,
+        requestId: string,
+        testApiKey: string,
+        testApiSecret: string,
+    ) {
+        try {
+            await executeOCOForBinance(
+                wsClient,
+                this.wsTestURL,
+                testApiKey,
+                testApiSecret,
+                symbol,
+                side,
+                quantity,
+                price,
+                stopPrice,
+                stopLimitPrice,
+                requestId,
+                recvWindow
+            )
+        } catch (error) {}
+    }
     async handleBinanceCancelOrder(symbol: string, orderId: number, requestId: string) {
         try {
             await cancelMarkOrderForBinance(
@@ -1140,4 +1437,3 @@ export const updateExchangeInfoInDB = async (userId: string, exchangeName: strin
         console.error("Failed to update DB:", err);
     }
 };
-

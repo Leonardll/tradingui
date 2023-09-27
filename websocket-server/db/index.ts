@@ -1,7 +1,7 @@
 import mongoose, { Schema, model, connect } from "mongoose"
 import dotenv from "dotenv"
-import { orderSchema, OrderModel } from "./models/Order"
-import { TradeModel } from "./models/Trade"
+import { orderSchema, OrderModel } from "./models/binance/Order"
+import { TradeModel } from "./models/binance/Trade"
 dotenv.config({ path: ".env.test" })
 
 // mongoose.set('debug', true);

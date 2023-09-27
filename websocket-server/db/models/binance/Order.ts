@@ -1,5 +1,4 @@
 import mongoose, { Schema, Document } from "mongoose"
-import dotenv from "dotenv"
 
 export interface IFill {
     price: string
@@ -27,6 +26,7 @@ export interface IOrder extends Document {
     workingTime: number
     selfTradePreventionMode: string
     fills: IFill[]
+    
 }
 
 const fillSchema = new Schema<IFill>({

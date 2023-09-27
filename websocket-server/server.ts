@@ -1,4 +1,4 @@
-import { OrderModel } from "./db/models/Order"
+import { OrderModel } from "./db/models/binance/Order"
 import express, { Express, Request, Response, NextFunction } from "express"
 import http from "http"
 import cors from "cors"
@@ -9,7 +9,7 @@ import { connectToMongoDB } from "./db"
 import { set } from "mongoose"
 import { eventEmitter } from "./events/eventEmitter"
 import { fetchMyTrade, fetchCurrentOrderCount } from "./services/binanceApiService/binanceApiService"
-import { uploadTradesToDB } from "./db/operations/tradeOps"
+import { uploadTradesToDB } from "./db/operations/binance/tradeOps"
 dotenv.config({ path: ".env.test" })
 
 const app = express()

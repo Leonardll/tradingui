@@ -2,7 +2,7 @@
   "name": "websocket-server",
   "version": "1.0.0",
   "description": "server",
-  "main": "index.js",
+  "main": "server.js",
   "license": "MIT",
   "dependencies": {
     "@total-typescript/ts-reset": "^0.4.2",
@@ -31,15 +31,15 @@
     "wscat": "^5.2.0"
   },
   "devDependencies": {
-    "concurrently": "^8.2.0",
+    "concurrently": "^8.2.1",
     "nodemon": "^3.0.1",
     "prettier": "^3.0.0",
     "ts-node-dev": "^2.0.0"
   },
   "scripts": {
     "build": "tsc",
-    "start": "NODE_ENV=test node dist/server.ts",
-    "dev": "concurrently \"tsc --watch\" \"nodemon dist/server.js\"",
+    "start": "node ./dist/server.js",
+    "dev": "concurrently \"tsc --watch\" \"nodemon ./dist/websocket-server/server.js\"",
     "pretty": "prettier --write \"./**/*.{js,jsx,ts,tsx,json}\""
   }
 }

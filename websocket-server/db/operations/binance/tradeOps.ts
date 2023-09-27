@@ -1,5 +1,5 @@
-import { IOrder, OrderModel } from '../models/Order';
-import { ITrade, TradeModel } from '../models/Trade';
+import { IOrder, OrderModel } from '../../models/binance/Order';
+import { ITrade, TradeModel } from '../../models/binance/Trade';
 
 interface Trade {
   
@@ -80,6 +80,6 @@ export async function uploadTradesToDB(trades: Trade[], exchangeId: string) {
     } catch (error) {
       console.error("Error uploading trades to DB:", error);
     }
-  }
+}
 
   

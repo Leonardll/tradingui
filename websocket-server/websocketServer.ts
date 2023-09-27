@@ -4,7 +4,7 @@ import {
     getDataStreamListenKey,
     cancelOrder /* getOrderStatusFromBinance */,
 } from "./services/binanceService"
-import { OrderModel } from "./db/models/Order"
+import { OrderModel } from "./db/models/binance/Order"
 import {
     sleep,
  
@@ -131,10 +131,6 @@ interface Filter {
     stepSize?: string
 }
 
-interface BinanceResponse {
-    id: string
-    result: Order[]
-}
 
 export interface ExecutionReportData {
     e: string
@@ -186,10 +182,7 @@ export interface ExecutionReportData {
     W: string
     V: string
 }
-type ClientTradeData = {
-    symbol: string
-    orderId: string
-}
+
 
 export interface ListStatusData {
     e: "listStatus"
@@ -245,10 +238,6 @@ export interface PriceFeedMessage {
     n: number
 }
 
-interface BinanceWebSocketError {
-    code?: number
-    msg?: string
-}
 
 // database functions
 
@@ -359,69 +348,12 @@ export async function setupWebSocketServer(server: http.Server) {
         if (!wsTestURL || !streamUrl) {
             console.error("No test WebSocket URL provided")
             wsClient.send("No test WebSocket URL provided")
-            return
+            return;
         }
-        // console.log('initialised user data stream')
-        //  await initialiseUserDataStream(wsClient, wsTestURL, streamUrl, requestId, testApiKey)
-        await userDataReportWebsocket(wsClient, testApiKey, testApiSecret, streamUrl, requestId)
+       await userDataReportWebsocket(wsClient, testApiKey, testApiSecret, streamUrl, requestId)
         const orderController = new OrderController(wsClient, wsTestURL, requestId, testApiSecret)
-
         // Check if the request URL is '/exchangeInfo'
-        if (req.url === "/binanceExchangeInfo") {
-            console.log("Inside exchangeInfo condition")
-            if (wsTestURL) {
-                exchangeInfoWebsocket(wsClient, wsTestURL, requestId)
-            } else {
-                console.error("No test WebSocket URL provided")
-                wsClient.send("No test WebSocket URL provided")
-            }
-            // Test message to confirm data sending
-            // wsClient.send('Test exchangeInfo message');
-        } else if (req.url?.startsWith("/binanceUserDataReport")) {
-            if (!testApiKey || !testApiSecret) {
-                console.log("No test API key or secret provided")
-                wsClient.send("No test API key or secret provided")
-                return
-            }
-            if (!wsTestURL) {
-                console.error("Incorrect WebSocket URL provided")
-                wsClient.send("Incorrect Websocket URL provided")
-            } else {
-                userDataReportWebsocket(wsClient, testApiKey, testApiSecret, wsTestURL, requestId)
-            }
-        } else if (req.url?.startsWith("/binanceUserInfo")) {
-            if (!testApiKey || !testApiSecret) {
-                console.error("No test API key or secret provided")
-                wsClient.send("No test API key or secret provided")
-            } else {
-                if (!wsTestURL) {
-                    console.error("Incorrect WebSocket URL provided")
-                    wsClient.send("Incorrect Websocket URL provided")
-                } else {
-                    userInfoWebsocket(wsClient, wsTestURL, testApiKey, testApiSecret, requestId)
-                }
-            }
-        } else if (req.url?.startsWith("/binanceOrderStatus")) {
-            console.log("Inside orderStatus condition")
-            if (!testApiKey || !testApiSecret) {
-                console.log("No test API key or secret provided")
-                wsClient.send("No test API key or secret provided")
-            } else {
-                if (!wsTestURL) {
-                    console.error("Incorrect WebSocket URL provided")
-                    wsClient.send("Incorrect Websocket URL provided")
-                } else {
-                    orderStatusWebsocket(
-                        wsClient,
-                        wsTestURL,
-                        requestId,
-                        testApiSecret,
-                        testApiKey,
-                        req,
-                    )
-                }
-            }
-        } else if (req.url?.startsWith("/binanceAllOrders")) {
+        if (req.url?.startsWith("/binanceAllOrders")) {
             console.log("Inside orderStatus condition")
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
@@ -441,15 +373,75 @@ export async function setupWebSocketServer(server: http.Server) {
                     )
                 }
             }
-        } else if (req.url?.startsWith("/binancePriceFeed")) {
-            console.log("Inside priceFeed condition")
-            if (!streamUrl) {
-                console.error("Incorrect WebSocket URL provided")
-                wsClient.send("Incorrect Websocket URL provided")
+        } else if (req.url?.startsWith("/binanceCancelOrder")) {
+        } else if (req.url?.startsWith("/binanceExchangeInfo")) {
+            console.log("Inside exchangeInfo condition")
+            if (wsTestURL) {
+                exchangeInfoWebsocket(wsClient, wsTestURL, requestId)
             } else {
-                priceFeedWebsocket(wsClient, streamUrl, req, listenkey)
+                console.error("No test WebSocket URL provided")
+                wsClient.send("No test WebSocket URL provided")
             }
-        } else if (req.url?.startsWith("/binanceMarketOrder")) {
+        // Test message to confirm data sending
+        // wsClient.send('Test exchangeInfo message');
+        } else
+         if (req.url?.startsWith("/binanceLimitOrder")) {
+            console.log("Inside limitOrder condition")
+
+            if (!testApiKey || !testApiSecret) {
+                console.log("No test API key or secret provided")
+                wsClient.send("No test API key or secret provided")
+            } else {
+                if (!wsTestURL) {
+                    console.error("Incorrect WebSocket URL provided")
+                    wsClient.send("Incorrect WebSocket URL provided")
+                } else {
+                    // Parse the limit order request to get necessary parameters
+                    // const { symbol, side, price, quantity, requestId } = parseLimitOrderRequest(req);
+                    const parsedUrl = url.parse(req.url, true)
+                    if (parsedUrl && parsedUrl.query) {
+                        const { symbol, side, price, quantity } = parsedUrl.query
+
+                
+                            // Handle the limit order
+
+                            if (
+                                symbol &&
+                                typeof symbol === "string" &&
+                                side &&
+                                typeof side === "string" &&
+                                price &&
+                                typeof price === "string" &&
+                                quantity &&
+                                typeof quantity === "string" 
+                            ) {
+                             orderController.handleBinanceLimitOrder(
+                                    wsClient,
+                                    symbol,
+                                    side,
+                                    quantity,
+                                    price,
+                                    requestId,
+                                    testApiKey,
+                                    testApiSecret,
+                                ).then(() => {
+                                    wsClient.send("Limit order successfully placed.")
+                                })
+                                .catch((err) => {
+                                    wsClient.send(`Error placing Limit order: ${err.message}`)
+                                })
+                            }
+
+                
+                         
+                    } else {
+                        console.log("Invalid request URL or missing parameters.")
+                    }
+                    // Create an instance of OrderController
+                }
+            }
+        } 
+        else if (req.url?.startsWith("/binanceMarketOrder")) {
             console.log("Inside marketOrder condition")
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
@@ -500,63 +492,120 @@ export async function setupWebSocketServer(server: http.Server) {
                     }
                 }
             }
-        } else if (req.url?.startsWith("/binancelimitOrder")) {
-            console.log("Inside limitOrder condition")
-
+        } 
+        else if (req.url?.startsWith("/binanceOrderStatus")) {
+            console.log("Inside orderStatus condition")
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
                 wsClient.send("No test API key or secret provided")
             } else {
                 if (!wsTestURL) {
                     console.error("Incorrect WebSocket URL provided")
-                    wsClient.send("Incorrect WebSocket URL provided")
+                    wsClient.send("Incorrect Websocket URL provided")
                 } else {
-                    // Parse the limit order request to get necessary parameters
-                    // const { symbol, side, price, quantity, requestId } = parseLimitOrderRequest(req);
-                    const parsedUrl = url.parse(req.url, true)
+                    orderStatusWebsocket(
+                        wsClient,
+                        wsTestURL,
+                        requestId,
+                        testApiSecret,
+                        testApiKey,
+                        req,
+                    )
+                }
+            }
+        } else if (req.url?.startsWith("/binancePriceFeed")) {
+            console.log("Inside priceFeed condition")
+            if (!streamUrl) {
+                console.error("Incorrect WebSocket URL provided")
+                wsClient.send("Incorrect Websocket URL provided")
+            } else {
+                priceFeedWebsocket(wsClient, streamUrl, req, listenkey)
+            }
+        } else if (req.url?.startsWith("/binanceUserDataReport")) {
+            if (!testApiKey || !testApiSecret) {
+                console.log("No test API key or secret provided")
+                wsClient.send("No test API key or secret provided")
+                return
+            }
+            if (!wsTestURL) {
+                console.error("Incorrect WebSocket URL provided")
+                wsClient.send("Incorrect Websocket URL provided")
+            } else {
+                userDataReportWebsocket(wsClient, testApiKey, testApiSecret, wsTestURL, requestId)
+            }
+        } else if (req.url?.startsWith("/binanceUserInfo")) {
+            if (!testApiKey || !testApiSecret) {
+                console.error("No test API key or secret provided")
+                wsClient.send("No test API key or secret provided")
+            } else {
+                if (!wsTestURL) {
+                    console.error("Incorrect WebSocket URL provided")
+                    wsClient.send("Incorrect Websocket URL provided")
+                } else {
+                    userInfoWebsocket(wsClient, wsTestURL, testApiKey, testApiSecret, requestId)
+                }
+            }
+        }  
+        else if (req.url?.startsWith("/binanceOcoOrder")) {
+            console.log("Inside OCO Order condition");
+        
+            if (!testApiKey || !testApiSecret) {
+                console.log("No test API key or secret provided");
+                wsClient.send("No test API key or secret provided");
+            } else {
+                if (!wsTestURL) {
+                    console.error("Incorrect WebSocket URL provided");
+                    wsClient.send("Incorrect WebSocket URL provided");
+                } else {
+                    // Parse the OCO order request to get necessary parameters
+                    const parsedUrl = url.parse(req.url, true);
                     if (parsedUrl && parsedUrl.query) {
-                        const { symbol, side, price, quantity } = parsedUrl.query
-
+                        const { symbol, side, stopPrice, limitPrice, quantity,stopLimitPrice } = parsedUrl.query;
+        
                         try {
-                            // Handle the limit order
-
+                            // Handle the OCO order
                             if (
                                 symbol &&
                                 typeof symbol === "string" &&
                                 side &&
                                 typeof side === "string" &&
-                                quantity &&
-                                typeof quantity === "string" &&
-                                price &&
-                                typeof price === "string"
+                                stopPrice &&
+                                typeof stopPrice === "string" &&
+                                limitPrice &&
+                                typeof limitPrice === "string" &&
+                                quantity && stopLimitPrice &&
+                                typeof stopLimitPrice === "string" &&
+                                typeof quantity === "string"
                             ) {
-                                await orderController.handleBinanceLimitOrder(
+                                await orderController.handleBinanceLimitOcoOrder(
                                     wsClient,
                                     symbol,
                                     side,
+                                    limitPrice,
+                                    stopPrice,
+                                    stopLimitPrice,
                                     quantity,
-                                    price,
                                     requestId,
                                     testApiKey,
                                     testApiSecret,
-                                )
+                                );
                             }
-
-                            wsClient.send("Limit order placed successfully")
+        
+                            wsClient.send("OCO order placed successfully");
                         } catch (error) {
-                            console.error("Error placing limit order:", error)
-                            wsClient.send("Error placing limit order")
+                            console.error("Error placing OCO order:", error);
+                            wsClient.send("Error placing OCO order");
                         }
                     } else {
-                        console.log("Invalid request URL or missing parameters.")
+                        console.log("Invalid request URL or missing parameters.");
                     }
-                    // Create an instance of OrderController
                 }
             }
-        } else if (req.url?.startsWith("/binanceOcoOrder")) {
-        } else if (req.url?.startsWith("/binanceCancelOrder")) {
-        } else if (req.url?.startsWith("/binanceTrades")) {
-        } else if (req.url?.startsWith("/")) {
+        }
+         else if (req.url?.startsWith("/binanceTrades")) {
+
+        } 
+        else if (req.url?.startsWith("/")) {
         } else if (req.url?.startsWith("/")) {
         } else if (req.url?.startsWith("/")) {
         } else if (req.url?.startWith("/")) {

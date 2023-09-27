@@ -1,4 +1,4 @@
-import { OrderModel } from "./../db/models/Order"
+import { OrderModel } from "../db/models/binance/Order"
 import axios from "axios"
 import crypto from "crypto"
 import http from "http"
@@ -95,7 +95,7 @@ let ordersForSymbol: any = {}
 if (!wsTestURL) {
     throw new Error("No test WebSocket URL provided")
 }
-const rateLimitManager = new RateLimitManager()
+// const rateLimitManager = new RateLimitManager()
 
 let reconnectAttempts = 0
 let reconnectInterval = 1000 // 1 second
