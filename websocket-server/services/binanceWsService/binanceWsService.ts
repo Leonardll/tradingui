@@ -95,13 +95,13 @@ interface RateLimit {
     count: number;
   }
   
-  interface OCOOrderInfo {
+  export interface OCOOrderInfo {
     symbol: string;
     orderId: number;
     clientOrderId: string;
   }
   
-  interface OCOOrderResult extends IOrder {
+  export interface OCOOrderResult extends IOrder {
     orderListId: number;
   }
   

@@ -560,8 +560,8 @@ export async function setupWebSocketServer(server: http.Server) {
                     // Parse the OCO order request to get necessary parameters
                     const parsedUrl = url.parse(req.url, true);
                     if (parsedUrl && parsedUrl.query) {
-                        const { symbol, side, stopPrice, limitPrice, quantity,stopLimitPrice } = parsedUrl.query;
-        
+                        const { symbol, side, stopPrice, price, quantity,stopLimitPrice } = parsedUrl.query;
+                        console.log(symbol,side,stopPrice,price,quantity,stopLimitPrice, 'from parsed url inside oco order')
                         try {
                             // Handle the OCO order
                             if (
@@ -569,22 +569,24 @@ export async function setupWebSocketServer(server: http.Server) {
                                 typeof symbol === "string" &&
                                 side &&
                                 typeof side === "string" &&
+                                price &&
+                                typeof price === "string" &&
+                                quantity &&
+                                typeof quantity === "string" &&
                                 stopPrice &&
                                 typeof stopPrice === "string" &&
-                                limitPrice &&
-                                typeof limitPrice === "string" &&
-                                quantity && stopLimitPrice &&
-                                typeof stopLimitPrice === "string" &&
-                                typeof quantity === "string"
+                                stopLimitPrice && 
+                                typeof stopLimitPrice === "string" 
+                               
                             ) {
                                 await orderController.handleBinanceLimitOcoOrder(
                                     wsClient,
                                     symbol,
                                     side,
-                                    limitPrice,
+                                    price,
+                                    quantity,
                                     stopPrice,
                                     stopLimitPrice,
-                                    quantity,
                                     requestId,
                                     testApiKey,
                                     testApiSecret,
