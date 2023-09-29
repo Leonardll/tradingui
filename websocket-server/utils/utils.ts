@@ -81,21 +81,21 @@ interface LimitOrderParams {
 interface OCOOrderParams {
     symbol: string
     side: string
-    quantity: string
     price: string
+    quantity: string
     stopPrice: string
+    stopLimitPrice: string
+    stopLimitTimeInForce: string
+    recvWindow: number
+    timestamp: number
+    apiKey: string
+    signature?: string
     listClientOrderId?: string
     limitClientOrderId?: string
     stopClientOrderId?: string
     limitIcebergQty?: string
     stopIcebergQty?: string
-    stopLimitPrice: string
-    stopLimitTimeInForce: string
     newOrderRespType?: string
-    timestamp: number
-    recvWindow: number
-    apiKey: string
-    signature?: string
 }
 
 interface CancelOrderParams {
@@ -1198,10 +1198,10 @@ async function executeOCOForBinance(
         if (!testApiKey || !testApiSecret) {
             throw HandleApiErrors.BinanceError.fromCode(-1002); // Unauthorized
         }
-        if (!symbol || !side || !quantity || !price || !stopPrice || !stopLimitPrice) {
+        if (!symbol || !side || !price || !quantity || !stopPrice || !stopLimitPrice) {
             throw HandleApiErrors.BinanceError.fromCode(-1015); // Invalid parameters
         }
-
+        console.log("variables",symbol, side, price, quantity, stopPrice, stopLimitPrice)
         const timestamp = generateDate();
         const params: OCOOrderParams = {
             symbol: symbol.toUpperCase(),
@@ -1216,24 +1216,30 @@ async function executeOCOForBinance(
             recvWindow: recvWindow,
             timestamp: timestamp,
         };
-
+      
         const paramsWithoutSignature = { ...params };
         delete paramsWithoutSignature.signature;
 
         const sortedKeys = Object.keys(paramsWithoutSignature).sort();
         const queryString = sortedKeys.map((key) => `${key}=${(params as any)[key]}`).join("&");
+        console.log("Before Signature:", queryString);
         const signature = generateBinanceSignature(queryString, testApiSecret);
         params.signature = signature;
-        console.log(queryString)
+        console.log("After Signature:", queryString);
+        console.log(queryString, "queryString")
+        console.log(signature, "signature")
         const wsOCOOrderManager = new WebsocketManager(
             `${wsTestURL}`,
             requestId,
             "orderList.place",
             params,
         );
-    console.log(params)
-        wsOCOOrderManager.on("open", () => {
+      console.log("params",params)
+        wsOCOOrderManager.on("open", (req) => {
+            
             console.log("Connection to OCO order manager opened");
+            console.log("req", req)
+            console.log("sending params", params)
         });
 
         wsOCOOrderManager.on("message", async (data: string | Buffer) => {
@@ -1253,10 +1259,10 @@ async function executeOCOForBinance(
         
             if ("status" in parsedData && parsedData.status === 200) {
                 // This looks like an OCO Order Response object with a successful status
-                await handleOCOOrderResponse(parsedData as OCOOrderResponse); // You can define handleOCOOrderResponse function
+                await handleOCOOrderResponse(parsedData as OCOOrderResponse);
             } else if ("e" in parsedData) {
                 // This looks like an ExecutionReportData object
-                await handleExecutionReport(parsedData as ExecutionReportData); // You can define handleExecutionReport function
+                await handleExecutionReport(parsedData as ExecutionReportData); // 
             } else {
                 console.error("Unknown data type");
             }

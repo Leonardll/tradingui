@@ -1,8 +1,22 @@
-import { OCOOrderResponse } from "../../../services/binanceWsService/binanceWsService";
+import { OCOOrderInfo, OCOOrderResponse, OCOOrderResult,  } from "../../../services/binanceWsService/binanceWsService";
 import { IOCOOrder, OCOOrderModel } from "../../models/binance/OCOOrders";
 import { IOrder } from "../../models/binance/Order";
 
-export async function uploadOCOToDB(ocoOrders: OCOOrderResponse[]) {
+interface ActualOCOOrderResponse {
+  orderListId: number;
+  contingencyType: string;
+  listStatusType: string;
+  listOrderStatus: string;
+  listClientOrderId: string;
+  transactionTime: number;
+  symbol: string;
+  orders: OCOOrderInfo[];
+  orderReports: OCOOrderResult[];
+  exchangeId: string;
+}
+
+
+export async function uploadOCOToDB(ocoOrders: ActualOCOOrderResponse[]) {
   try {
     if (!ocoOrders || ocoOrders.length === 0) {
       throw new Error("No OCO orders provided for upload.");
@@ -10,7 +24,7 @@ export async function uploadOCOToDB(ocoOrders: OCOOrderResponse[]) {
 
     for (const ocoOrder of ocoOrders) {
       // Validate required fields
-      if (!ocoOrder.result.orderListId || !ocoOrder.result.symbol) {
+      if (!ocoOrder || !ocoOrder.orderListId || !ocoOrder.symbol) {
         console.warn(`Skipping OCO order due to missing required fields: ${JSON.stringify(ocoOrder)}`);
         continue;
       }
@@ -18,7 +32,7 @@ export async function uploadOCOToDB(ocoOrders: OCOOrderResponse[]) {
       // Check if the OCO order exists in the OCOOrders Collection
       let existingOCOOrder;
       try {
-        existingOCOOrder = await OCOOrderModel.findOne({ orderListId: ocoOrder.result.orderListId });
+        existingOCOOrder = await OCOOrderModel.findOne({ orderListId: ocoOrder.orderListId });
       } catch (findError) {
         console.error(`Error finding existing OCO order: ${findError}`);
         continue;
@@ -27,10 +41,9 @@ export async function uploadOCOToDB(ocoOrders: OCOOrderResponse[]) {
       // If not, insert it
       if (!existingOCOOrder) {
         const newOCOOrderData: Partial<IOCOOrder> = {
+          ...ocoOrder,
           exchangeId: "binance",  // Assuming the exchangeId is "binance"
-          ...ocoOrder.result,
-          orderReports: ocoOrder.result.orderReports as unknown as IOrder[]
-
+          orderReports: ocoOrder.orderReports as unknown as IOrder[]
         };
 
         try {
@@ -44,8 +57,8 @@ export async function uploadOCOToDB(ocoOrders: OCOOrderResponse[]) {
         // If the OCO order already exists, you can update it here if needed
         try {
           await OCOOrderModel.findOneAndUpdate(
-            { orderListId: ocoOrder.result.orderListId },
-            { listOrderStatus: ocoOrder.result.listOrderStatus },
+            { orderListId: ocoOrder.orderListId },
+            { listOrderStatus: ocoOrder.listOrderStatus },
             { new: true }
           );
         } catch (updateError) {
