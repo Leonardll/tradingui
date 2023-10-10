@@ -247,12 +247,6 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
             return
         }
 
-        // Check for WebSocket ping
-        // if (isWebSocketPing(orderData)) {
-        //     console.log("Received WebSocket ping, skipping database operation.");
-        //     return;
-        // }
-
         let count = await OrderModel.countDocuments({})
         console.log(`Total orders: ${count}`)
         console.log("Order Data before updating:", orderData)
@@ -290,7 +284,22 @@ export async function updateOrderInDatabase(orderData: ExecutionReportData, orde
                 }
                 break
 
-            // ... (rest of the cases remain the same)
+            case "CANCELED":
+                // Update the order as canceled
+                const updateCanceledOrder = await OrderModel.findOneAndUpdate(
+                    { orderId: orderData.i },
+                    { status: "CANCELED" },
+                    { new: true, maxTimeMS: 2000 },
+                )
+                if (updateCanceledOrder) {
+                    console.log(
+                        "Successfully updated canceled order in database:",
+                        updateCanceledOrder,
+                    )
+                } else {
+                    console.log("Order not found in database:", orderData.i)
+                }
+                break
 
             default:
                 console.log("Unknown order status:", orderStatus)

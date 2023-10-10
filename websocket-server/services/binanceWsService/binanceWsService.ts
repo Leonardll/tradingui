@@ -1,5 +1,7 @@
 import { IOrder } from './../../../ui/app/models/order';
 import WebSocket from "ws"
+import dotenv from "dotenv"
+
 import { getDataStreamListenKey, updateOrderInDatabase } from "../binanceService"
 import { OrderModel } from "../../db/models/binance/Order"
 import { IExchangeInfo } from "../../db/models/binance/Exchange"
@@ -24,6 +26,8 @@ import {
     BalanceUpdateData,
     ExecutionReportData,
 } from "../../websocketServer"
+dotenv.config({ path: ".env.test" })
+
 /**
  * Initialize and manage WebSocket connection for exchange info.
  * @param wsTestURL - The WebSocket test URL for the exchange.
@@ -121,6 +125,22 @@ interface RateLimit {
     };
     rateLimits: RateLimit[];
   }
+
+  export interface CancelOrderResponse {
+    symbol: string;
+    origClientOrderId: string;
+    orderId: number;
+    orderListId: number;
+    clientOrderId: string;
+    price: string;
+    origQty: string;
+    executedQty: string;
+    cummulativeQuoteQty: string;
+    status: string;
+    timeInForce: string;
+    type: string;
+    side: string;
+}
   
 async function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
     console.log("Account Position Update:", data)
@@ -253,7 +273,23 @@ export async function handleOrderResponse(data: OrderResponse) {
         console.log("Received an OrderResponse with an error status or empty result:", data.status)
     }
 }
+// export async function handleCancelOrderResponse(cancelData: CancelOrderResponse) {
+//     console.log("Cancel Order Response:", cancelData);
 
+//     // Extract relevant information
+//     const symbol = cancelData.symbol;
+//     const orderId = cancelData.orderId;
+//     const clientOrderId = cancelData.clientOrderId;
+//     const status = cancelData.status;
+
+//     if (status === "CANCELED") {
+//         // Update the database to mark the order as canceled
+//         await updateOrderInDatabase(cancelData, "CANCELED");
+//         // Optionally, you can add logic to send notifications or alerts here
+//     } else {
+//         console.error("Unexpected status in cancel order response:", status);
+//     }
+// }
 // Function to handle 'executionReport' event
 export async function handleExecutionReport(data: ExecutionReportData) {
     console.log("Order Update:", data)
@@ -276,12 +312,11 @@ export async function handleExecutionReport(data: ExecutionReportData) {
             orderStatus === "FILLED" ||
             orderStatus === "CANCELED" ||
             orderStatus === "REJECTED" ||
-            orderStatus === "TRADE"
+            orderStatus === "TRADE" || 
+            orderStatus === "EXPIRED"
         ) {
             await updateOrderInDatabase(data, orderStatus)
-        } else if (orderStatus === "EXPIRED") {
-            // Handle expired orders
-            //  logic here
+      
         } else {
             console.error("Unknown order status:", orderStatus)
         }
@@ -309,6 +344,7 @@ function handleListStatus(data: ListStatusData) {
         console.error("Unknown list order status:", listOrderStatus)
     }
 }
+
 
 // exchange data
 export function exchangeInfoWebsocket(

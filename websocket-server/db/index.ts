@@ -32,9 +32,9 @@ export const connectToMongoDB = async (callback?: () => void) => {
         //       }
         //       mongoose.connection.close();
   
-        // Delete all documents from the collection
+       // Delete all documents from the collection
         // try {
-        //     await mongoose.connection.collections['exchanges']!.drop()
+        //     await mongoose.connection.collections['real_orders']!.drop()
         //     console.log('collection dropped');
             
         // } catch   (err) {

@@ -108,6 +108,16 @@ interface CancelOrderParams {
     newClientOrderId: boolean
 }
 
+interface CancelOCOOrderParams {
+    symbol: string
+    orderListId: number
+    timestamp: number
+    recvWindow: number
+    apiKey: string
+    signature: string
+    newClientOrderId: boolean
+}
+
 interface Fill {
     price: string
     qty: string
@@ -948,23 +958,24 @@ async function executeMarketOrderForBinance(
 async function cancelMarkOrderForBinance(
     wsClient: WebSocket,
     wsTestURL: string,
-    testApiKey: string,
+    requestId: string,
     testApiSecret: string,
     symbol: string,
     orderId: number,
-    requestId: string,
+    testApiKey: string,
 ) {
     if (!testApiKey || !testApiSecret) {
         throw HandleApiErrors.BinanceError.fromCode(-1002) // Replace with actual error code
     }
-    const timestamp = generateDate()
     if (!symbol) {
         throw HandleApiErrors.BinanceError.fromCode(-1015) // Replace with actual error code
     }
     if (!orderId) {
         throw HandleApiErrors.BinanceError.fromCode(-1014) // Replace with actual error code
     }
-    const queryString = `apikey=${testApiKey}&newClientOrderId=false&orderId=${orderId}&recvWindow=${recvWindow}&symbol=${symbol}&timestamp=${timestamp}`
+    const timestamp = generateDate()
+    const queryString = `apiKey=${testApiKey}&newClientOrderId=false&orderId=${orderId}&recvWindow=${recvWindow}&symbol=${symbol}&timestamp=${timestamp}`
+    console.log('queryString', queryString)
     const signature = generateBinanceSignature(queryString, testApiSecret)
     const params: CancelOrderParams = {
         symbol: symbol,
@@ -975,40 +986,154 @@ async function cancelMarkOrderForBinance(
         recvWindow: recvWindow,
         newClientOrderId: false,
     }
-    const wsLimitOrderManager = new WebsocketManager(
+    console.log(params)
+    console.log('params',params)
+    const wsCancelOrderManager = new WebsocketManager(
         `${wsTestURL}`,
         requestId,
         "order.cancel",
         params,
     )
-    wsLimitOrderManager.on("open", () => {
+    wsCancelOrderManager.on("open", () => {
         console.log("Connection to limit order manager opened")
     })
 
-    wsLimitOrderManager.on("message", async (data: string | Buffer) => {
-        console.log("Received message from limit order manager", data)
-        const parsedData = JSON.parse(data.toString())
-
-        if (wsClient.readyState === WebSocket.OPEN) {
-            console.log("Sending limit order message to client:", data)
-
-            if (typeof data === "object") {
-                wsClient.send(JSON.stringify(data))
-            } else {
-                wsClient.send(JSON.stringify(data))
+    wsCancelOrderManager.on("message", async (data: string | Buffer) => {
+        console.log("Received message from limit order manager", typeof data);
+    
+        let parsedData: any;
+    
+        if (typeof data === "string") {
+            parsedData = JSON.parse(data);
+        } else if (Buffer.isBuffer(data)) {
+            parsedData = JSON.parse(data.toString());
+        } else {
+            parsedData = data;
+        }
+    
+        // Check if the message is relevant for database update
+        if ("status" in parsedData && parsedData.status === 200) {
+            // This looks like an OrderResponse object with a successful status
+            try {
+                const orderId = parsedData.result.orderId;  // Replace with the actual field for orderId in your parsedData
+                const newStatus = parsedData.result.status;
+                await updateOrderInDatabase(orderId, newStatus);  // Assuming updateOrderInDatabase is an async function
+                console.log("Database updated successfully");
+            } catch (dbError) {
+                console.error("Error updating database:", dbError);
+            }
+        } else if ("e" in parsedData) {
+            // This looks like an ExecutionReportData object
+            try {
+                await handleExecutionReport(parsedData);
+                console.log("Database updated with execution report");
+            } catch (dbError) {
+                console.error("Error updating database with execution report:", dbError);
             }
         } else {
-            console.error("WebSocket is not initialized. Cannot send data")
+            console.error("Unknown data type or not relevant for database update");
         }
-    })
-    wsLimitOrderManager.on("error", (event) => {
+    
+        if (wsClient.readyState === WebSocket.OPEN) {
+            console.log("Sending limit order message to client:", parsedData);
+    
+            // Always send as a JSON string
+            wsClient.send(JSON.stringify(parsedData));
+        } else {
+            console.error("WebSocket is not initialized. Cannot send data");
+        }
+    });
+    
+    wsCancelOrderManager.on("error", (event) => {
         console.error("Cancel Order Connection Error:", JSON.stringify(event))
     })
-    wsLimitOrderManager.on("close", (code, reason) => {
+    wsCancelOrderManager.on("close", (code, reason) => {
         console.log(`Cancel Order Connection closed: ${code} ${reason}`)
     })
 }
 
+async function cancelOCOOrderForBinance(
+    wsClient: WebSocket,
+    wsTestURL: string,
+    symbol: string,
+    orderListId: number,
+    testApiKey: string,
+    requestId: string,
+    testApiSecret: string,
+) {
+    if (!testApiKey || !testApiSecret) {
+        throw HandleApiErrors.BinanceError.fromCode(-1002) // Replace with actual error code
+    }
+    const timestamp = generateDate()
+    if (!symbol) {
+        throw HandleApiErrors.BinanceError.fromCode(-1015) // Replace with actual error code
+    }
+    if (!orderListId) {
+        throw HandleApiErrors.BinanceError.fromCode(-1014) // Replace with actual error code
+    }
+    console.log('orderListId', orderListId, 'symbol', symbol)
+    console.log(testApiKey)
+    const queryString = `apiKey=${testApiKey}&newClientOrderId=false&orderListId=${orderListId}&recvWindow=${recvWindow}&symbol=${symbol}&timestamp=${timestamp}`
+    console.log('queryString', queryString)
+    const signature = generateBinanceSignature(queryString, testApiSecret)
+    const params: CancelOCOOrderParams = {
+        symbol: symbol,
+        orderListId: orderListId,
+        apiKey: testApiKey,
+        signature: signature,
+        timestamp: timestamp,
+        recvWindow: recvWindow,
+        newClientOrderId: false,
+    }
+    console.log('params', params)
+    const wsCancelOCOOrderManager = new WebsocketManager(
+        `${wsTestURL}`,
+        requestId,
+        "orderList.cancel",
+        params,
+    )
+    wsCancelOCOOrderManager.on("open", () => {
+        console.log("Connection to limit order manager opened")
+    })
+
+    wsCancelOCOOrderManager.on("message", async (data: string | Buffer) => {
+        console.log("Received message from limit order manager", data);
+        
+        // Check if data is a Buffer and convert it to a string
+        if (Buffer.isBuffer(data)) {
+            data = data.toString('utf8');
+        }
+
+        // Check if data is already an object
+        let parsedData;
+        if (typeof data === 'object') {
+            parsedData = data;
+        } else {
+            try {
+                parsedData = JSON.parse(data.toString());
+            } catch (error) {
+                console.error('JSON parsing failed:', error);
+            }
+        }
+
+        console.log('Parsed Data:', parsedData);
+
+        if (wsClient.readyState === WebSocket.OPEN) {
+            console.log("Sending limit order message to client:", parsedData);
+
+            // Always send data as a string
+            wsClient.send(JSON.stringify(parsedData));
+        } else {
+            console.error("WebSocket is not initialized. Cannot send data");
+        }
+    });
+    wsCancelOCOOrderManager.on("error", (event) => {
+        console.error("Cancel Order Connection Error:", JSON.stringify(event))
+    })
+    wsCancelOCOOrderManager.on("close", (code, reason) => {
+        console.log(`Cancel Order Connection closed: ${code} ${reason}`)
+    })
+}
 async function executeLimitOrderForBinance(
     wsClient: WebSocket,
     wsTestURL: string,
@@ -1201,7 +1326,6 @@ async function executeOCOForBinance(
         if (!symbol || !side || !price || !quantity || !stopPrice || !stopLimitPrice) {
             throw HandleApiErrors.BinanceError.fromCode(-1015); // Invalid parameters
         }
-        console.log("variables",symbol, side, price, quantity, stopPrice, stopLimitPrice)
         const timestamp = generateDate();
         const params: OCOOrderParams = {
             symbol: symbol.toUpperCase(),
@@ -1222,23 +1346,18 @@ async function executeOCOForBinance(
 
         const sortedKeys = Object.keys(paramsWithoutSignature).sort();
         const queryString = sortedKeys.map((key) => `${key}=${(params as any)[key]}`).join("&");
-        console.log("Before Signature:", queryString);
         const signature = generateBinanceSignature(queryString, testApiSecret);
         params.signature = signature;
-        console.log("After Signature:", queryString);
-        console.log(queryString, "queryString")
-        console.log(signature, "signature")
+   
         const wsOCOOrderManager = new WebsocketManager(
             `${wsTestURL}`,
             requestId,
             "orderList.place",
             params,
         );
-      console.log("params",params)
         wsOCOOrderManager.on("open", (req) => {
             
             console.log("Connection to OCO order manager opened");
-            console.log("req", req)
             console.log("sending params", params)
         });
 
@@ -1408,10 +1527,10 @@ export class OrderController {
             )
         } catch (error) {}
     }
-    async handleBinanceCancelOrder(symbol: string, orderId: number, requestId: string) {
+    async handleBinanceCancelOrder(wsClient: WebSocket, symbol: string, orderId: number, requestId: string, testApiKey: string, testApiSecret: string ) {
         try {
             await cancelMarkOrderForBinance(
-                this.wsClient,
+                wsClient,
                 this.wsTestURL,
                 this.testApiKey,
                 this.testApiSecret,
@@ -1425,7 +1544,22 @@ export class OrderController {
         }
     }
     async handleBinanceCancelAllOrders() {}
-    async handleBinanceCancelOcoOrder() {}
+    async handleBinanceCancelOCOOrder(wsClient: WebSocket,symbol: string, orderListId: number, requestId: string, testApiKey: string, testApiSecret: string) {
+        try {
+            await cancelOCOOrderForBinance(
+                wsClient,
+                this.wsTestURL,
+                symbol,
+                orderListId,
+                requestId,
+                this.testApiKey,
+                this.testApiSecret,
+            )
+            console.log("Binance limit order handled successfully")
+        } catch (error) {
+            console.error("Error executing Binance limit order:", error)
+        }
+    }
     async handleBinanceReplaceOrder() {}
 }
 

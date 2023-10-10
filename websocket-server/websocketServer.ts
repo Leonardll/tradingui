@@ -373,8 +373,80 @@ export async function setupWebSocketServer(server: http.Server) {
                     )
                 }
             }
+        } else if (req.url?.startsWith("/binanceCancelOCOOrder")) {
+            console.log("Inside cancelOCOOrder condition");
+        
+            if (!testApiKey || !testApiSecret) {
+                console.log("No test API key or secret provided");
+                wsClient.send("No test API key or secret provided");
+            } else {
+                const parsedUrl = url.parse(req.url, true);
+                if (parsedUrl && parsedUrl.query) {
+                    const { symbol, orderListId } = parsedUrl.query;
+        
+                    if (
+                        symbol &&
+                        typeof symbol === "string" &&
+                        orderListId &&
+                        typeof orderListId === "string"
+                    ) {
+                        orderController.handleBinanceCancelOCOOrder(
+                            wsClient,
+                            symbol,
+                            Number(orderListId),
+                            testApiKey,
+                            testApiSecret,
+                            requestId,
+                        )
+                        .then(() => {
+                            wsClient.send("OCO order successfully canceled.");
+                        })
+                        .catch((err) => {
+                            wsClient.send(`Error canceling OCO order: ${err.message}`);
+                        });
+                    }
+                } else {
+                    console.log("Invalid request URL or missing parameters.");
+                }
+            }
         } else if (req.url?.startsWith("/binanceCancelOrder")) {
-        } else if (req.url?.startsWith("/binanceExchangeInfo")) {
+            console.log("Inside cancelOrder condition");
+        
+            if (!testApiKey || !testApiSecret) {
+                console.log("No test API key or secret provided");
+                wsClient.send("No test API key or secret provided");
+            } else {
+                const parsedUrl = url.parse(req.url, true);
+                if (parsedUrl && parsedUrl.query) {
+                    const { symbol, orderId } = parsedUrl.query;
+        
+                    if (
+                        symbol &&
+                        typeof symbol === "string" &&
+                        orderId &&
+                        typeof orderId === "string"
+                    ) {
+                        orderController.handleBinanceCancelOrder(
+                            wsClient,
+                            symbol,
+                            Number(orderId),
+                            testApiKey,
+                            testApiSecret,
+                            requestId
+                        )
+                        .then(() => {
+                            wsClient.send("Order successfully canceled.");
+                        })
+                        .catch((err) => {
+                            wsClient.send(`Error canceling order: ${err.message}`);
+                        });
+                    }
+                } else {
+                    console.log("Invalid request URL or missing parameters.");
+                }
+            }
+        }
+        else if (req.url?.startsWith("/binanceExchangeInfo")) {
             console.log("Inside exchangeInfo condition")
             if (wsTestURL) {
                 exchangeInfoWebsocket(wsClient, wsTestURL, requestId)
@@ -384,8 +456,7 @@ export async function setupWebSocketServer(server: http.Server) {
             }
         // Test message to confirm data sending
         // wsClient.send('Test exchangeInfo message');
-        } else
-         if (req.url?.startsWith("/binanceLimitOrder")) {
+        } else if (req.url?.startsWith("/binanceLimitOrder")) {
             console.log("Inside limitOrder condition")
 
             if (!testApiKey || !testApiSecret) {

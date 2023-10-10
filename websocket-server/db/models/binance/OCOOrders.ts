@@ -43,8 +43,8 @@ const ocoOrderSchema = new Schema({
 
 ocoOrderSchema.index({ 'exchangeId' : 1,'orderListId': 1, 'symbol': 1 });
 const isTestEnv = process.env.NODE_ENV === "test"
-console.log("isTestEnv", isTestEnv)
+console.log("isTestEnv from oco model", isTestEnv)
 const collectionPrefix = isTestEnv ? "test_" : "real_"
-console.log("collectionPrefix", collectionPrefix)
+console.log("collectionPrefix from oco model", collectionPrefix)
 
 export const OCOOrderModel = mongoose.model<IOCOOrder>(`${collectionPrefix}OCOOrders`, ocoOrderSchema);
