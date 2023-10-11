@@ -8,7 +8,10 @@ import { setupWebSocketServer } from "./websocketServer"
 import { connectToMongoDB } from "./db"
 import { set } from "mongoose"
 import { eventEmitter } from "./events/eventEmitter"
-import { fetchMyTrade, fetchCurrentOrderCount } from "./services/binanceApiService/binanceApiService"
+import {
+    fetchMyTrade,
+    fetchCurrentOrderCount,
+} from "./services/binanceApiService/binanceApiService"
 import { uploadTradesToDB } from "./db/operations/binance/tradeOps"
 dotenv.config({ path: ".env.test" })
 
@@ -46,24 +49,22 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 
 // Routes
 routes.get("/myBinanceTrades", async (req, res) => {
-    
     try {
-    if (!req.query.symbol) {
-        res.status(400).send("Missing query parameters")
-        return;
-    } 
+        if (!req.query.symbol) {
+            res.status(400).send("Missing query parameters")
+            return
+        }
 
-        const mytrades = await fetchMyTrade(req.query.symbol, Number(req.query.orderId)) 
+        const mytrades = await fetchMyTrade(req.query.symbol, Number(req.query.orderId))
         const exchangeId = "binance"
-        const tradeCount = mytrades.length;
-        await uploadTradesToDB(mytrades,exchangeId);
+        const tradeCount = mytrades.length
+        await uploadTradesToDB(mytrades, exchangeId)
 
-        res.send({apiTradeCount: tradeCount, trades:mytrades})
+        res.send({ apiTradeCount: tradeCount, trades: mytrades })
     } catch (error) {
-        console.error("An error occurred:", error);
-        res.status(500).send("Internal Server Error");
+        console.error("An error occurred:", error)
+        res.status(500).send("Internal Server Error")
     }
-    
 })
 
 routes.get("/ordersRateLimit", async (req, res) => {
@@ -74,7 +75,7 @@ routes.get("/ordersRateLimit", async (req, res) => {
 routes.get("/preventedMatches", async (req, res) => {
     if (!req.query.symbol) {
         res.status(400).send("Missing query parameters")
-        return;
+        return
     }
     const preventedMatches = await fetchMyTrade(req.query.symbol, Number(req.query.orderId))
 

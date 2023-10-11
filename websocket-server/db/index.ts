@@ -31,17 +31,15 @@ export const connectToMongoDB = async (callback?: () => void) => {
         //         console.error('An error occurred:', err);
         //       }
         //       mongoose.connection.close();
-  
-       // Delete all documents from the collection
+
+        // Delete all documents from the collection
         // try {
         //     await mongoose.connection.collections['real_orders']!.drop()
         //     console.log('collection dropped');
-            
+
         // } catch   (err) {
         //     console.error('An error occurred:', err);
         //   }
-
-
 
         //Rename the collection
         // const collection = mongoose.connection.db.collection('trades');
@@ -52,15 +50,15 @@ export const connectToMongoDB = async (callback?: () => void) => {
         //     try {
         //       const filter = { exchangeId: { $exists: false } };  // Find orders where exchangeId does not exist
         //       const update = { $set: { exchangeId: "binance" } };  // Set exchangeId to "binance"
-          
+
         //       const result = await OrderModel.updateMany(filter, update);
-          
+
         //       console.log(`Matched ${result.matchedCount} documents and modified ${result.modifiedCount} documents.`);
         //     } catch (error) {
         //       console.log("An error occurred while updating the orders:", error);
         //     }
         //   }
-          
+
         //   // Call the function to perform the update
         //   addExchangeIdToExistingOrders();
 
@@ -68,18 +66,17 @@ export const connectToMongoDB = async (callback?: () => void) => {
         //     try {
         //       const filter = { exchangeId: { $exists: false } };  // Find orders where exchangeId does not exist
         //       const update = { $set: { exchangeId: "binance" } };  // Set exchangeId to "binance"
-          
+
         //       const result = await TradeModel.updateMany(filter, update);
-          
+
         //       console.log(`Matched ${result.matchedCount} documents and modified ${result.modifiedCount} documents.`);
         //     } catch (error) {
         //       console.log("An error occurred while updating the trades:", error);
         //     }
         //   }
-          
+
         //   // Call the function to perform the update
         //   addExchangeIdToExistingTrades();
-          
 
         // Call the optional callback if provided
         if (callback) {

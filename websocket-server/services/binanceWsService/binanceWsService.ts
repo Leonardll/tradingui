@@ -1,4 +1,4 @@
-import { IOrder } from './../../../ui/app/models/order';
+import { IOrder } from "./../../../ui/app/models/order"
 import WebSocket from "ws"
 import dotenv from "dotenv"
 
@@ -7,12 +7,12 @@ import { OrderModel } from "../../db/models/binance/Order"
 import { IExchangeInfo } from "../../db/models/binance/Exchange"
 import { uploadOCOToDB } from "../../db/operations/binance/ocoOps"
 import { IOCOOrder } from "../../db/models/binance/OCOOrders"
+import { generateDate } from "../../utils/dateUtils"
+import { generateBinanceSignature } from "../../utils/signatureUtils"
+import { ParamsType } from "../../types"
 import {
     WebsocketManager,
     BinanceStreamManager,
-    generateDate,
-    generateBinanceSignature,
-    ParamsType,
     updateExchangeInfoInDB,
     generateRandomId,
 } from "../../utils/utils"
@@ -92,56 +92,56 @@ interface OrderResponse {
 }
 
 interface RateLimit {
-    rateLimitType: string;
-    interval: string;
-    intervalNum: number;
-    limit: number;
-    count: number;
-  }
-  
-  export interface OCOOrderInfo {
-    symbol: string;
-    orderId: number;
-    clientOrderId: string;
-  }
-  
-  export interface OCOOrderResult extends IOrder {
-    orderListId: number;
-  }
-  
- export  interface OCOOrderResponse {
-    id: string;
-    status: number;
-    result: {
-      orderListId: number;
-      contingencyType: string;
-      listStatusType: string;
-      listOrderStatus: string;
-      listClientOrderId: string;
-      transactionTime: number;
-      symbol: string;
-      orders: OCOOrderInfo[];
-      orderReports: OCOOrderResult[];
-    };
-    rateLimits: RateLimit[];
-  }
-
-  export interface CancelOrderResponse {
-    symbol: string;
-    origClientOrderId: string;
-    orderId: number;
-    orderListId: number;
-    clientOrderId: string;
-    price: string;
-    origQty: string;
-    executedQty: string;
-    cummulativeQuoteQty: string;
-    status: string;
-    timeInForce: string;
-    type: string;
-    side: string;
+    rateLimitType: string
+    interval: string
+    intervalNum: number
+    limit: number
+    count: number
 }
-  
+
+export interface OCOOrderInfo {
+    symbol: string
+    orderId: number
+    clientOrderId: string
+}
+
+export interface OCOOrderResult extends IOrder {
+    orderListId: number
+}
+
+export interface OCOOrderResponse {
+    id: string
+    status: number
+    result: {
+        orderListId: number
+        contingencyType: string
+        listStatusType: string
+        listOrderStatus: string
+        listClientOrderId: string
+        transactionTime: number
+        symbol: string
+        orders: OCOOrderInfo[]
+        orderReports: OCOOrderResult[]
+    }
+    rateLimits: RateLimit[]
+}
+
+export interface CancelOrderResponse {
+    symbol: string
+    origClientOrderId: string
+    orderId: number
+    orderListId: number
+    clientOrderId: string
+    price: string
+    origQty: string
+    executedQty: string
+    cummulativeQuoteQty: string
+    status: string
+    timeInForce: string
+    type: string
+    side: string
+}
+
 async function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
     console.log("Account Position Update:", data)
 
@@ -241,19 +241,21 @@ function mapOrderResultToExecutionReportData(orderResult: OrderResult): Executio
     }
 }
 
-export async function handleOCOOrderResponse(data: any) {  // Use any here
+export async function handleOCOOrderResponse(data: any) {
+    // Use any here
     if (data && data.status === 200 && data.result && Object.keys(data.result).length > 0) {
-      const ocoOrderDataWithExchangeId = {
-        ...data.result,
-        exchangeId: "binance",
-      };
-      await uploadOCOToDB([ocoOrderDataWithExchangeId]);
+        const ocoOrderDataWithExchangeId = {
+            ...data.result,
+            exchangeId: "binance",
+        }
+        await uploadOCOToDB([ocoOrderDataWithExchangeId])
     } else {
-      console.log("Received an OCOOrderResponse with an error status or empty result:", data?.status);
+        console.log(
+            "Received an OCOOrderResponse with an error status or empty result:",
+            data?.status,
+        )
     }
-  }
-  
-
+}
 
 export async function handleOrderResponse(data: OrderResponse) {
     if (data.status === 200 && data.result && Object.keys(data.result).length > 0) {
@@ -312,11 +314,10 @@ export async function handleExecutionReport(data: ExecutionReportData) {
             orderStatus === "FILLED" ||
             orderStatus === "CANCELED" ||
             orderStatus === "REJECTED" ||
-            orderStatus === "TRADE" || 
+            orderStatus === "TRADE" ||
             orderStatus === "EXPIRED"
         ) {
             await updateOrderInDatabase(data, orderStatus)
-      
         } else {
             console.error("Unknown order status:", orderStatus)
         }
@@ -345,7 +346,6 @@ function handleListStatus(data: ListStatusData) {
     }
 }
 
-
 // exchange data
 export function exchangeInfoWebsocket(
     wsClient: WebSocket,
@@ -357,24 +357,23 @@ export function exchangeInfoWebsocket(
     wsExchangeInfoManager.on("open", () => {
         console.log("Connection to exchange info opened")
     })
-    let lastExchangeInfo: IExchangeInfo | null = null;
+    let lastExchangeInfo: IExchangeInfo | null = null
 
     wsExchangeInfoManager.on("message", async (data: any) => {
-        console.log("Raw data from exchange:", data);
-        if (data && data.type === 'ping') {
-            console.log("Received a ping message, ignoring.");
-            return;
+        console.log("Raw data from exchange:", data)
+        if (data && data.type === "ping") {
+            console.log("Received a ping message, ignoring.")
+            return
         }
         if (wsClient.readyState === WebSocket.OPEN) {
-            console.log("wsClient exchange info is open. Sending data.", data);
-            wsClient.send(JSON.stringify(data));
+            console.log("wsClient exchange info is open. Sending data.", data)
+            wsClient.send(JSON.stringify(data))
         } else {
-            console.log("wsClient is not open. Cannot send data.");
+            console.log("wsClient is not open. Cannot send data.")
         }
 
         try {
             if (data.result.length > 0) {
-
                 const newExchangeInfoData: IExchangeInfo = {
                     // Map the fields from the raw data to your IExchangeInfo interface
                     // For example:
@@ -385,36 +384,31 @@ export function exchangeInfoWebsocket(
                     symbols: data.result.symbols,
                     sors: data.result.sors,
                     // ... add other fields
-                };
-                
-               if (JSON.stringify(newExchangeInfoData) !== JSON.stringify(lastExchangeInfo)) {
-                   const exchangeName = "Binance";
-                   const userId = 'leol'; // Replace with actual user ID logic
-       
-                   await updateExchangeInfoInDB(userId, exchangeName, newExchangeInfoData);
-                   console.log("Successfully updated DB.");
-       
-                   // Update lastExchangeInfo with newExchangeInfoData
-                   lastExchangeInfo = newExchangeInfoData;
-               } else {
-                   console.log("Exchange info has not changed. Skipping DB update.");
-               }
+                }
+
+                if (JSON.stringify(newExchangeInfoData) !== JSON.stringify(lastExchangeInfo)) {
+                    const exchangeName = "Binance"
+                    const userId = "leol" // Replace with actual user ID logic
+
+                    await updateExchangeInfoInDB(userId, exchangeName, newExchangeInfoData)
+                    console.log("Successfully updated DB.")
+
+                    // Update lastExchangeInfo with newExchangeInfoData
+                    lastExchangeInfo = newExchangeInfoData
+                } else {
+                    console.log("Exchange info has not changed. Skipping DB update.")
+                }
             }
-    
+
             // const exchangeName = "Binance";
             // const userId = generateRandomId(); // Replace with actual user ID logic
             // console.log("Data to update:", userId, exchangeName, exchangeInfoData);
             // await updateExchangeInfoInDB(userId, exchangeName, exchangeInfoData);
             // console.log("Successfully updated DB.");
         } catch (err) {
-            console.error("Error updating exchange info in DB or parsing data:", err);
+            console.error("Error updating exchange info in DB or parsing data:", err)
         }
-    });
-    
-    
-    
-    
-    
+    })
 
     wsExchangeInfoManager.on("error", (event) => {
         console.error("Websocket error:", JSON.stringify(event))
