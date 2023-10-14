@@ -1,8 +1,9 @@
+import { IOrder } from "../db/models/binance/Order";
 export type Asset = string
 export type EventTime = number
 export type OrderId = number
 export type ClientOrderId = string
-//export type Symbol = string
+export type Symbolx = string
 export type Balance = number
 
 export interface MarketOrderParams {
@@ -62,6 +63,14 @@ export interface CancelOrderParams {
     signature: string
     newClientOrderId: boolean
 }
+ export interface CancelAllOrdersParams {
+    symbol: string
+    timestamp: number
+    recvWindow: number
+    apiKey: string
+    signature: string
+    newClientOrderId?: boolean
+ }
 
 export interface CancelOCOOrderParams {
     symbol: string
@@ -137,11 +146,59 @@ export interface OrderResult {
     workingTime: number
     fills?: Fill[] // Optional, as it may not be present in all responses
 }
+export interface ListStatusData {
+    e: "listStatus"
+    E: EventTime
+    s: Symbol
+    g: number // OrderListId
+    c: string // Contingency Type
+    l: string // List Status Type
+    L: string // List Order Status
+    r: string // List Reject Reason
+    C: string // List Client Order Id
+    T: EventTime // Transaction Time
+    O: Array<{
+        s: Symbol
+        i: OrderId
+        c: ClientOrderId
+    }>
+}
+export interface Fill {
+    price: string
+    qty: string
+    commission: string
+    commissionAsset: string
+    tradeId: number
+}
 
 export interface OCOOrderInfo {
     symbol: string
     orderId: number
     clientOrderId: string
+}
+
+export interface OrderResult {
+    symbol: string
+    orderId: number
+    orderListId: number
+    clientOrderId: string
+    transactTime: number
+    price: string
+    origQty: string
+    executedQty: string
+    cummulativeQuoteQty: string
+    status: string
+    timeInForce: string
+    type: string
+    side: string
+    workingTime: number
+    fills?: Fill[] // Optional, as it may not be present in all responses
+}
+export interface OrderResponse {
+    id: string
+    status: number
+    result: OrderResult
+    rateLimits: RateLimit[]
 }
 
 export interface OCOOrderResult extends OrderResult {
@@ -366,7 +423,7 @@ export interface Filter {
 export interface ExecutionReportData {
     e: string
     E: EventTime
-    s: Symbol
+    s: Symbolx
     c: ClientOrderId
     S: "BUY" | "SELL"
     o:
@@ -467,3 +524,93 @@ export interface PriceFeedMessage {
     L: number
     n: number
 }
+
+
+
+  
+ export  interface CancelReplaceResponse {
+    id: string;
+    status: number;
+    result?: {
+      cancelResult: string;
+      newOrderResult: string;
+      cancelResponse: any; // Define this based on your needs
+      newOrderResponse: any; // Define this based on your needs
+    };
+    error?: {
+      code: number;
+      msg: string;
+      data: any; // Define this based on your needs
+    };
+    rateLimits: RateLimit[];
+  }
+
+  export interface OCOOrderInfo {
+    symbol: string
+    orderId: number
+    clientOrderId: string
+}
+
+
+
+export interface OCOOrderResponse {
+    id: string
+    status: number
+    result: {
+        orderListId: number
+        contingencyType: string
+        listStatusType: string
+        listOrderStatus: string
+        listClientOrderId: string
+        transactionTime: number
+        symbol: string
+        orders: OCOOrderInfo[]
+        orderReports: OCOOrderResult[]
+    }
+    rateLimits: RateLimit[]
+}
+
+export interface CancelOrderResponse {
+    symbol: string
+    origClientOrderId: string
+    orderId: number
+    orderListId: number
+    clientOrderId: string
+    price: string
+    origQty: string
+    executedQty: string
+    cummulativeQuoteQty: string
+    status: string
+    timeInForce: string
+    type: string
+    side: string
+}
+
+  
+export interface CancelAndReplaceOrderParams {
+    symbol: string;
+    cancelReplaceMode: 'STOP_ON_FAILURE' | 'ALLOW_FAILURE';
+    cancelOrderId: number;
+    cancelOrigClientOrderId?: string;
+    cancelNewClientOrderId?: string;
+    side: 'BUY' | 'SELL';
+    type: string; // You can further restrict this to the types Binance supports like 'LIMIT', 'MARKET', etc.
+    timeInForce?: string; // Similarly, you can restrict this to 'GTC', 'IOC', etc.
+    price?: string;
+    quantity?: string;
+    quoteOrderQty?: number;
+    newClientOrderId?: string;
+    newOrderRespType?: string; // 'ACK', 'RESULT', 'FULL'
+    stopPrice?: string;
+    trailingDelta?: number;
+    icebergQty?: number;
+    strategyId?: number;
+    strategyType?: number;
+    selfTradePreventionMode?: string; // You can restrict this to the types Binance supports
+    cancelRestrictions?: string; // 'ONLY_NEW', 'ONLY_PARTIALLY_FILLED', etc.
+    apiKey: string;
+    recvWindow?: number;
+    signature?: string;
+    timestamp: number;
+  }
+  

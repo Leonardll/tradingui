@@ -1,6 +1,7 @@
 import axios from "axios"
 import dotenv from "dotenv"
-import { generateBinanceSignature, generateDate } from "../../utils/utils"
+import { generateBinanceSignature} from "../../utils/signatureUtils"
+import { generateDate } from "../../utils/dateUtils"
 import { ParsedQs } from "qs"
 import { type } from "os"
 dotenv.config({ path: ".env.test" })

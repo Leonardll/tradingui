@@ -2,7 +2,8 @@ import { IOrder } from "./../../../ui/app/models/order"
 import WebSocket from "ws"
 import dotenv from "dotenv"
 
-import { getDataStreamListenKey, updateOrderInDatabase } from "../binanceService"
+import { getDataStreamListenKey } from "../binanceService"
+import { updateOrderInDatabase } from "../../db/operations/binance/orderOps"
 import { OrderModel } from "../../db/models/binance/Order"
 import { IExchangeInfo } from "../../db/models/binance/Exchange"
 import { uploadOCOToDB } from "../../db/operations/binance/ocoOps"
@@ -13,19 +14,17 @@ import { ParamsType } from "../../types"
 import {
     WebsocketManager,
     BinanceStreamManager,
-    updateExchangeInfoInDB,
     generateRandomId,
 } from "../../utils/utils"
+import { updateExchangeInfoInDB } from "../../db/operations/binance/exchangeOps"
 import {
-    PriceFeedMessage,
-    EventTime,
-    Symbol,
-    OrderId,
-    ClientOrderId,
     OutboundAccountPositionData,
     BalanceUpdateData,
     ExecutionReportData,
-} from "../../websocketServer"
+    ListStatusData,
+    OrderResponse,
+    OrderResult,
+} from "../../types"
 dotenv.config({ path: ".env.test" })
 
 /**
@@ -36,111 +35,10 @@ dotenv.config({ path: ".env.test" })
  */
 
 let recvWindow = 60000
-interface ListStatusData {
-    e: "listStatus"
-    E: EventTime
-    s: Symbol
-    g: number // OrderListId
-    c: string // Contingency Type
-    l: string // List Status Type
-    L: string // List Order Status
-    r: string // List Reject Reason
-    C: string // List Client Order Id
-    T: EventTime // Transaction Time
-    O: Array<{
-        s: Symbol
-        i: OrderId
-        c: ClientOrderId
-    }>
-}
-interface Fill {
-    price: string
-    qty: string
-    commission: string
-    commissionAsset: string
-    tradeId: number
-}
-interface RateLimit {
-    rateLimitType: string
-    interval: string
-    intervalNum: number
-    limit: number
-    count: number
-}
-interface OrderResult {
-    symbol: string
-    orderId: number
-    orderListId: number
-    clientOrderId: string
-    transactTime: number
-    price: string
-    origQty: string
-    executedQty: string
-    cummulativeQuoteQty: string
-    status: string
-    timeInForce: string
-    type: string
-    side: string
-    workingTime: number
-    fills?: Fill[] // Optional, as it may not be present in all responses
-}
-interface OrderResponse {
-    id: string
-    status: number
-    result: OrderResult
-    rateLimits: RateLimit[]
-}
 
-interface RateLimit {
-    rateLimitType: string
-    interval: string
-    intervalNum: number
-    limit: number
-    count: number
-}
 
-export interface OCOOrderInfo {
-    symbol: string
-    orderId: number
-    clientOrderId: string
-}
 
-export interface OCOOrderResult extends IOrder {
-    orderListId: number
-}
 
-export interface OCOOrderResponse {
-    id: string
-    status: number
-    result: {
-        orderListId: number
-        contingencyType: string
-        listStatusType: string
-        listOrderStatus: string
-        listClientOrderId: string
-        transactionTime: number
-        symbol: string
-        orders: OCOOrderInfo[]
-        orderReports: OCOOrderResult[]
-    }
-    rateLimits: RateLimit[]
-}
-
-export interface CancelOrderResponse {
-    symbol: string
-    origClientOrderId: string
-    orderId: number
-    orderListId: number
-    clientOrderId: string
-    price: string
-    origQty: string
-    executedQty: string
-    cummulativeQuoteQty: string
-    status: string
-    timeInForce: string
-    type: string
-    side: string
-}
 
 async function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
     console.log("Account Position Update:", data)
@@ -275,24 +173,7 @@ export async function handleOrderResponse(data: OrderResponse) {
         console.log("Received an OrderResponse with an error status or empty result:", data.status)
     }
 }
-// export async function handleCancelOrderResponse(cancelData: CancelOrderResponse) {
-//     console.log("Cancel Order Response:", cancelData);
 
-//     // Extract relevant information
-//     const symbol = cancelData.symbol;
-//     const orderId = cancelData.orderId;
-//     const clientOrderId = cancelData.clientOrderId;
-//     const status = cancelData.status;
-
-//     if (status === "CANCELED") {
-//         // Update the database to mark the order as canceled
-//         await updateOrderInDatabase(cancelData, "CANCELED");
-//         // Optionally, you can add logic to send notifications or alerts here
-//     } else {
-//         console.error("Unexpected status in cancel order response:", status);
-//     }
-// }
-// Function to handle 'executionReport' event
 export async function handleExecutionReport(data: ExecutionReportData) {
     console.log("Order Update:", data)
 

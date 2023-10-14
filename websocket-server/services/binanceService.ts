@@ -1,8 +1,9 @@
+import { Symbol } from './../types/index';
 import dotenv from "dotenv"
 import axios from "axios"
 import crypto from "crypto"
 import { v4 as uuidv4 } from "uuid"
-import http from "http"
+import http, { request } from "http"
 import { OrderModel } from "../db/models/binance/Order"
 import { IExchange, ExchangeModel } from "../db/models/binance/Exchange"
 import {
@@ -10,6 +11,7 @@ import {
     LimitOrderParams,
     OCOOrderParams,
     CancelOrderParams,
+    CancelAllOrdersParams,
     CancelOCOOrderParams,
     Order,
     BinanceConnectionCheck,
@@ -18,7 +20,9 @@ import {
     TradeOrder,
     Data,
     Filter,
-    ExecutionReportData
+    ExecutionReportData,
+    CancelAndReplaceOrderParams,
+    
 } from "../types"
 import { HandleApiErrors } from "../utils/errorUtils"
 import { generateBinanceSignature } from "../utils/signatureUtils"
@@ -28,6 +32,7 @@ import {
     handleExecutionReport,
     handleOCOOrderResponse,
 } from "./binanceWsService/binanceWsService"
+import { updateOrderInDatabase, updateOrInsertOrder } from "../db/operations/binance/orderOps"
 import { WebSocket, Server } from "ws"
 import { setupWebSocket, WebsocketManager, RateLimitManager } from "../utils/utils"
 import { generateDate } from "../utils/dateUtils"
@@ -198,74 +203,7 @@ export async function handleUserDataMessage(wsClient: WebSocket, symbol: string,
     }
 }
 
-export async function updateOrderInDatabase(orderData: ExecutionReportData, orderStatus: string) {
-    try {
-        if (!orderData || Object.keys(orderData).length === 0 || !orderData.e || !orderData.i) {
-            console.log("Invalid order data, skipping database operation.")
-            return
-        }
 
-        let count = await OrderModel.countDocuments({})
-        console.log(`Total orders: ${count}`)
-        console.log("Order Data before updating:", orderData)
-
-        switch (orderStatus) {
-            case "NEW":
-                // Insert new order into the database
-                const newOrder = new OrderModel({
-                    ...orderData,
-                    status: "NEW",
-                })
-                await newOrder.save()
-                console.log("New order inserted into database:", newOrder)
-                break
-
-            case "PARTIALLY_FILLED":
-                // Handle the partially filled order status
-                // Update logic here if needed
-                break
-
-            case "FILLED":
-                // Update the order as filled
-                const updateFilledOrder = await OrderModel.findOneAndUpdate(
-                    { orderId: orderData.i },
-                    { status: "FILLED" },
-                    { new: true, maxTimeMS: 2000 },
-                )
-                if (updateFilledOrder) {
-                    console.log(
-                        "Successfully updated filled order in database:",
-                        updateFilledOrder,
-                    )
-                } else {
-                    console.log("Order not found in database:", orderData.i)
-                }
-                break
-
-            case "CANCELED":
-                // Update the order as canceled
-                const updateCanceledOrder = await OrderModel.findOneAndUpdate(
-                    { orderId: orderData.i },
-                    { status: "CANCELED" },
-                    { new: true, maxTimeMS: 2000 },
-                )
-                if (updateCanceledOrder) {
-                    console.log(
-                        "Successfully updated canceled order in database:",
-                        updateCanceledOrder,
-                    )
-                } else {
-                    console.log("Order not found in database:", orderData.i)
-                }
-                break
-
-            default:
-                console.log("Unknown order status:", orderStatus)
-        }
-    } catch (error) {
-        console.error("Error updating order in database:", error)
-    }
-}
 
 export async function executeMarketOrderForBinance(
     wsClient: WebSocket,
@@ -371,7 +309,7 @@ export async function executeMarketOrderForBinance(
     }
 }
 
-export async function cancelMarkOrderForBinance(
+export async function cancelMarketOrderForBinance(
     wsClient: WebSocket,
     wsTestURL: string,
     requestId: string,
@@ -411,11 +349,11 @@ export async function cancelMarkOrderForBinance(
         params,
     )
     wsCancelOrderManager.on("open", () => {
-        console.log("Connection to limit order manager opened")
+        console.log("Connection to cancel order manager opened")
     })
 
     wsCancelOrderManager.on("message", async (data: string | Buffer) => {
-        console.log("Received message from limit order manager", typeof data)
+        console.log("Received message from cancel order manager", typeof data)
 
         let parsedData: any
 
@@ -509,7 +447,7 @@ export async function cancelOCOOrderForBinance(
         params,
     )
     wsCancelOCOOrderManager.on("open", () => {
-        console.log("Connection to limit order manager opened")
+        console.log("Connection to OCO order manager opened")
     })
 
     wsCancelOCOOrderManager.on("message", async (data: string | Buffer) => {
@@ -834,4 +772,279 @@ export async function executeOCOForBinance(
             console.error("Unknown Error:", error)
         }
     }
+}
+
+export async function cancelAllOrdersForBinance(
+    wsClient: WebSocket,
+    wsTestURL: string,
+    symbol: string,
+    requestId: string,
+    testApiKey: string,
+    testApiSecret: string,
+) {
+    if (!testApiKey || !testApiSecret) {
+        throw HandleApiErrors.BinanceError.fromCode(-1002) // Replace with actual error code
+    }
+    if (!symbol) {
+        throw HandleApiErrors.BinanceError.fromCode(-1015) // Replace with actual error code
+    }
+  
+    const timestamp = generateDate()
+    const queryString = `apiKey=${testApiKey}&recvWindow=${recvWindow}&symbol=${symbol}&timestamp=${timestamp}`
+    console.log("queryString", queryString)
+    const signature = generateBinanceSignature(queryString, testApiSecret)
+    const params: CancelAllOrdersParams = {
+        symbol: symbol,
+        apiKey: testApiKey,
+        signature: signature,
+        timestamp: timestamp,
+        recvWindow: recvWindow,
+        //newClientOrderId: false,
+    }
+    console.log("params", params)
+    console.log(requestId)
+    const wsCancelAllOrdersManager = new WebsocketManager(
+        `${wsTestURL}`,
+        requestId,
+        "openOrders.cancelAll",
+        params,
+    )
+    wsCancelAllOrdersManager.on("open", () => {
+        console.log("Connection to cancel all orders manager opened")
+    })
+
+    wsCancelAllOrdersManager.on("message", async (data: string | Buffer) => {
+        console.log("Received data type:", typeof data);  // Debugging line
+        console.log("Received data:", data); 
+        let parsedData: any;
+    
+        try {
+            if (typeof data === "string") {
+                parsedData = JSON.parse(data);
+            } else if (Buffer.isBuffer(data)) {
+                parsedData = JSON.parse(data.toString());
+            } else if (typeof data === "object") {
+                parsedData = data;  // Data is already an object, no need to parse
+            } else {
+                console.error("Unhandled data type:", typeof data);  // Debugging line
+                throw new Error("Unknown data type received from WebSocket");
+            }
+        } catch (parseError) {
+            console.error("Error parsing WebSocket data:", parseError);
+            return;
+        }
+    
+        if ("status" in parsedData && parsedData.status === 200) {
+            try {
+                if (Array.isArray(parsedData.result)) {
+                    // Handle multiple orders
+                    for (const order of parsedData.result) {
+                        const orderId = order.orderId;
+                        const newStatus = order.status;
+                        await updateOrderInDatabase(orderId, newStatus);
+                    }
+                } else {
+                    // Handle single order
+                    const orderId = parsedData.result.orderId;
+                    const newStatus = parsedData.result.status;
+                    await updateOrderInDatabase(orderId, newStatus);
+                }
+                console.log("Database updated successfully");
+            } catch (dbError) {
+                console.error("Error updating database:", dbError);
+            }
+        } else if ("e" in parsedData) {
+            // This looks like an ExecutionReportData object
+            try {
+                await handleExecutionReport(parsedData);
+                console.log("Database updated with execution report");
+            } catch (dbError) {
+                console.error("Error updating database with execution report:", dbError);
+            }
+        } else {
+            console.error("Unknown data type or not relevant for database update");
+        }
+    
+        try {
+            if (wsClient.readyState === WebSocket.OPEN) {
+                console.log("Sending limit order message to client:", parsedData);
+                wsClient.send(JSON.stringify(parsedData));
+            } else {
+                throw new Error("WebSocket is not initialized. Cannot send data");
+            }
+        } catch (wsError) {
+            console.error("WebSocket error:", wsError);
+        }
+    });
+
+    wsCancelAllOrdersManager.on("error", (event) => {
+        console.error("Cancel Order Connection Error:", JSON.stringify(event))
+    })
+    wsCancelAllOrdersManager.on("close", (code, reason) => {
+        console.log(`Cancel Order Connection closed: ${code} ${reason}`)
+    })
+}
+
+export async function cancelAndReplaceOrderForBinance(
+    wsClient: WebSocket,
+    wsTestURL: string,
+    symbol: string,
+    cancelReplaceMode: string,
+    cancelOrderId: number,
+    side: string,
+    type: string,
+    quantity: string,
+    price: string,
+    requestId: string,
+    testApiKey: string,
+    testApiSecret: string,
+
+) {
+
+    console.log(cancelOrderId, "cancelOrderId")
+    if (!testApiKey || !testApiSecret) {
+        throw HandleApiErrors.BinanceError.fromCode(-1002) // Replace with actual error code
+    }
+    if (!symbol || !cancelReplaceMode || ! cancelOrderId || !side || !type) {
+        throw HandleApiErrors.BinanceError.fromCode(-1102) // Replace with actual error code
+    }
+
+    function isCancelReplaceMode(mode: string): mode is "STOP_ON_FAILURE" | "ALLOW_FAILURE" {
+        return mode === "STOP_ON_FAILURE" || mode === "ALLOW_FAILURE";
+    }
+    
+    function isSide(side: string): side is "BUY" | "SELL" {
+        return side === "BUY" || side === "SELL";
+    }
+
+    if (!isCancelReplaceMode(cancelReplaceMode)) {
+        throw new Error("Invalid cancelReplaceMode");
+    }
+    
+    if (!isSide(side.toUpperCase())) {
+        throw new Error("Invalid side");
+    }
+    
+
+    const timestamp = generateDate()
+    const queryString = `apiKey=${testApiKey}&cancelOrderId=${cancelOrderId}&cancelReplaceMode=${cancelReplaceMode}&price=${price}&quantity=${quantity}&recvWindow=${recvWindow}&side=${side.toUpperCase()}&symbol=${symbol.toUpperCase()}&timestamp=${timestamp}&timeInForce=GTC&type=${type.toUpperCase()}`
+    
+    const params: CancelAndReplaceOrderParams = {
+        symbol: symbol.toUpperCase(),
+        cancelReplaceMode: cancelReplaceMode,
+        cancelOrderId: Number(cancelOrderId),
+        side: side.toUpperCase()  as "BUY" | "SELL",
+        type: type.toUpperCase(),
+        timeInForce: "GTC",
+        price: price,
+        quantity: quantity,
+        apiKey: testApiKey,
+        signature: "",
+        recvWindow: recvWindow,
+        timestamp: timestamp,
+    }
+
+    const paramsWithoutSignature = { ...params };
+    delete paramsWithoutSignature.signature;
+
+    const sortedKeys = Object.keys(paramsWithoutSignature).sort();
+    const sortedQueryString = sortedKeys.map((key) => `${key}=${(params as any)[key]}`).join('&');
+    console.log("Sorted Query String:", sortedQueryString);
+    const signature = generateBinanceSignature(sortedQueryString, testApiSecret)
+    params.signature = signature;
+   console.log("Generated Signature:", signature);
+    console.log(" params", params)
+    const wsCancelAndReplaceOrderManager = new WebsocketManager(`${wsTestURL}`, requestId, "order.cancelReplace", params)
+    
+     wsCancelAndReplaceOrderManager.on("open", () => {
+        console.log("Connection to cancel and replace order manager opened")
+
+     })
+     wsCancelAndReplaceOrderManager.on("message", async (data: string | Buffer) => {
+        let parsedData: any;
+        try {
+            if (typeof data === "string") {
+                parsedData = JSON.parse(data);
+            } else if (Buffer.isBuffer(data)) {
+                parsedData = JSON.parse(data.toString());
+            }  else if (typeof data === "object") {
+                parsedData = data; // If it's already an object, no need to parse
+            } else {
+                throw new Error("Unknown data type received from WebSocket");
+            }
+        } catch (parseError) {
+            console.error("Error parsing WebSocket data:", parseError);
+            return;
+        }
+
+        if ("status" in parsedData) {
+            const status = parsedData.status;
+            switch (status) {
+                case 200:
+                    // Handle successful cancel and replace
+                    if (parsedData.result) {
+                        const { cancelResult, newOrderResult, cancelResponse, newOrderResponse } = parsedData.result;
+                        if (cancelResult === "SUCCESS" && newOrderResult === "SUCCESS") {
+                            try {
+                                // Update or insert canceled order
+                                await updateOrInsertOrder(cancelResponse);
+    
+                                // Update or insert new order
+                                await updateOrInsertOrder(newOrderResponse);
+    
+                                console.log("Database updated successfully");
+                            } catch (err) {
+                                console.error("Error updating database:", err);
+                            }
+                        } else {
+                            console.error("Cancel or Replace operation failed:", parsedData);
+                        }
+                    }
+                    break;
+                
+                case 400:
+                    // Handle both operations failed
+                    console.error("Both operations failed:", parsedData.error.data);
+                    break;
+                    case 409:
+                // Handle partial failure
+                const partialData = parsedData.error.data;
+                if (partialData.cancelResult === "FAILURE" && partialData.newOrderResult === "SUCCESS") {
+                    console.warn("Cancel failed but new order succeeded:", partialData);
+                    
+                    // Insert the new order into the database
+                    const newOrderData = partialData.newOrderResponse;
+                    const newOrder = new OrderModel({
+                        ...newOrderData,
+                        exchangeId: "binance",  // Add any other necessary fields
+                    });
+                    try {
+                        await newOrder.save();
+                        console.log("New order inserted into database:", newOrder);
+                    } catch (err) {
+                        console.error("Error inserting new order into database:", err);
+                    }
+                }
+                break;
+        
+                default:
+                    // Handle other error cases
+                    console.error("Error in cancel and replace operation:", parsedData.error.msg);
+                    break;
+            }
+        }  else {
+            console.error("Unknown data type or not relevant for database update");
+        }
+
+        try {
+            if (wsClient.readyState === WebSocket.OPEN) {
+                wsClient.send(JSON.stringify(parsedData));
+            } else {
+                throw new Error("WebSocket is not initialized. Cannot send data");
+            }
+        } catch (wsError) {
+            console.error("WebSocket error:", wsError);
+        }
+    });
+     
 }

@@ -1,6 +1,7 @@
 import { Server, WebSocket } from "ws"
 import http, { get, request } from "http"
 import {
+    cancelOrder,
     getDataStreamListenKey,
 } from "./services/binanceService"
 import { OrderModel } from "./db/models/binance/Order"
@@ -9,16 +10,9 @@ import dotenv from "dotenv"
 dotenv.config({ path: ".env.test" })
 import url from "url"
 import { set } from "mongoose"
-import { generateRandomId, OrderController } from "./utils/utils"
-import {
-    exchangeInfoWebsocket,
-    userDataReportWebsocket,
-    userInfoWebsocket,
-    orderStatusWebsocket,
-    allOrdersWebsocket,
-    priceFeedWebsocket,
-    // initialiseUserDataStream
-} from "./services/binanceWsService/binanceWsService"
+import { generateRandomId } from "./utils/utils"
+import { OrderController } from "./controllers/OrderControllers"
+import { userDataReportWebsocket, allOrdersWebsocket, orderStatusWebsocket,exchangeInfoWebsocket,userInfoWebsocket, priceFeedWebsocket } from "./services/binanceWsService/binanceWsService"
 import { ExchangeInfoData, ExecutionReportData } from "./types"
 // env variables
 const wsTestURL = process.env.BINANCE_TEST_WEBSOCKET_API_URL
@@ -173,7 +167,66 @@ export async function setupWebSocketServer(server: http.Server) {
                     )
                 }
             }
-        } else if (req.url?.startsWith("/binanceCancelOCOOrder")) {
+        } 
+
+        else if (req.url?.startsWith("/binanceCancelAndReplaceOrder")) {
+            console.log("Inside cancelAndReplaceOrder condition");
+        
+            if (!testApiKey || !testApiSecret) {
+                console.log("No test API key or secret provided");
+                wsClient.send("No test API key or secret provided");
+            } else {
+                const parsedUrl = url.parse(req.url, true);
+                if (parsedUrl && parsedUrl.query) {
+                    const { symbol, cancelReplaceMode, cancelOrderId, side, type, quantity, price } = parsedUrl.query;
+        
+                    if (
+                        symbol &&
+                        typeof symbol === "string" &&
+                        cancelReplaceMode &&
+                        (cancelReplaceMode === "STOP_ON_FAILURE" || cancelReplaceMode === "ALLOW_FAILURE") &&
+                        cancelOrderId &&
+                        typeof cancelOrderId === "string" &&
+                        side &&
+                        (side === "BUY" || side === "SELL") &&
+                        type &&
+                        typeof type === "string" &&
+                        quantity &&
+                        typeof quantity === "string" &&
+                        price &&
+                        typeof price === "string"
+                    ) {
+                        orderController
+                            .handleBinanceCancelReplaceOrder(
+                                wsClient,
+                                symbol,
+                                cancelReplaceMode,
+                                Number(cancelOrderId),
+                                side,
+                                type,
+                                quantity,
+                                price,
+                                requestId,
+                                testApiKey,
+                                testApiSecret,
+                            )
+                            .then(() => {
+                                wsClient.send("Order successfully canceled and replaced.");
+                            })
+                            .catch((err) => {
+                                wsClient.send(`Error canceling and replacing order: ${err.message}`);
+                            });
+                    } else {
+                        console.log("Invalid request URL or missing parameters.");
+                        wsClient.send("Invalid request URL or missing parameters.");
+                    }
+                } else {
+                    console.log("Invalid request URL or missing parameters.");
+                    wsClient.send("Invalid request URL or missing parameters.");
+                }
+            }
+        }  
+        else if (req.url?.startsWith("/binanceCancelOCOOrder")) {
             console.log("Inside cancelOCOOrder condition")
 
             if (!testApiKey || !testApiSecret) {
@@ -204,6 +257,40 @@ export async function setupWebSocketServer(server: http.Server) {
                             })
                             .catch((err) => {
                                 wsClient.send(`Error canceling OCO order: ${err.message}`)
+                            })
+                    }
+                } else {
+                    console.log("Invalid request URL or missing parameters.")
+                }
+            }
+        } else if (req.url?.startsWith("/binanceCancelAllOrders")) {
+            console.log("Inside cancelAllOrders condition")
+  
+            if (!testApiKey || !testApiSecret) {
+                console.log("No test API key or secret provided")
+                wsClient.send("No test API key or secret provided")
+            } else {
+                const parsedUrl = url.parse(req.url, true)
+                if (parsedUrl && parsedUrl.query) {
+                    const { symbol } = parsedUrl.query
+
+                    if (
+                        symbol &&
+                        typeof symbol === "string" 
+                    ) {
+                        orderController
+                            .handleBinanceCancelAllOrders(
+                                wsClient,
+                                symbol,
+                                requestId,
+                                testApiKey,
+                                testApiSecret,
+                            )
+                            .then(() => {
+                                wsClient.send("Order successfully canceled.")
+                            })
+                            .catch((err) => {
+                                wsClient.send(`Error canceling order: ${err.message}`)
                             })
                     }
                 } else {

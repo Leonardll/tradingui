@@ -2,7 +2,7 @@ import {
     OCOOrderInfo,
     OCOOrderResponse,
     OCOOrderResult,
-} from "../../../services/binanceWsService/binanceWsService"
+} from "../../../types"
 import { IOCOOrder, OCOOrderModel } from "../../models/binance/OCOOrders"
 import { IOrder } from "../../models/binance/Order"
 
