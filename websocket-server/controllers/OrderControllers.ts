@@ -270,6 +270,7 @@ export class OrderController {
         requestId: string,
         testApiKey: string,
         testApiSecret: string,
+        
     ) {
         try {
             await executeOCOForBinance(
@@ -286,7 +287,11 @@ export class OrderController {
                 requestId,
                 recvWindow,
             )
-        } catch (error) {}
+            console.log("Binance OCO order handled successfully");  // Add this line
+
+        } catch (error) {
+            console.error("Error executing Binance OCO order:", error)
+        }
     }
     async handleBinanceCancelOrder(
         wsClient: WebSocket,
@@ -327,6 +332,8 @@ async handleBinanceCancelAllOrders(
                         testApiKey,
                         testApiSecret,
                     )
+                    console.log('Binance OCO order handled successfully');
+
                 } catch (error) {
                     console.error(`Error cancelling all orders for ${symbol}:`, error)
                  }
