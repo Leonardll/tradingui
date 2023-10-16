@@ -158,7 +158,13 @@ export class WebsocketManager {
             this.eventEmitter,
         )
         this.eventEmitter.on("close", this.onClose.bind(this))
-        this.eventEmitter.on("error", this.onError.bind(this))
+        this.eventEmitter.on("error", this.onError.bind(this))        
+        this.eventEmitter.setMaxListeners(50);
+
+        // Debug: Print the number of listeners for each event
+        console.log("Number of 'message' listeners:", this.eventEmitter.listenerCount('message'));
+        console.log("Number of 'error' listeners:", this.eventEmitter.listenerCount('error'));
+        console.log("Number of 'close' listeners:", this.eventEmitter.listenerCount('close'));
     }
     private setupWebSocket() {
         return new WebSocket(this.baseUrl)
@@ -367,7 +373,11 @@ export class BinanceStreamManager {
     constructor(baseEndpoint: string) {
         this.ws = new WebSocket(baseEndpoint)
         this.eventEmitter = new EventEmitter()
+        this.eventEmitter.setMaxListeners(50);
 
+        // Debug: Print the number of listeners for each event
+        console.log("Number of 'message' listeners:", this.eventEmitter.listenerCount('message'));
+        console.log("Number of 'error' listeners:", this.eventEmitter.listenerCount('error'));
         this.ws.on("open", () => {
             console.log(`WebSocket stream connection established. To ${baseEndpoint}`)
             this.processSubscriptionQueue()
