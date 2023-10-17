@@ -1,10 +1,12 @@
 import { IOrder } from "../db/models/binance/Order";
+import { Observable } from "rxjs";
 export type Asset = string
 export type EventTime = number
 export type OrderId = number
 export type ClientOrderId = string
 export type Symbolx = string
 export type Balance = number
+
 
 export interface MarketOrderParams {
     symbol: string
@@ -271,31 +273,7 @@ export interface Data {
     result?: Order[]
 }
 
-export interface PriceFeedMessage {
-    e: string
-    E: number
-    s: string
-    p: string
-    P: string
-    w: string
-    x: string
-    c: string
-    Q: string
-    b: string
-    B: string
-    a: string
-    A: string
-    o: string
-    h: string
-    l: string
-    v: string
-    q: string
-    O: number
-    C: number
-    F: number
-    L: number
-    n: number
-}
+
 
 export interface RateLimit {
     rateLimitType: string
@@ -355,6 +333,17 @@ export interface Data {
     s: string
     id?: string // Add this line
     result?: Order[]
+}
+
+export interface GenericPriceData {
+
+    timestamp: number;
+    symbol: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
 }
 
 export interface RateLimit {
@@ -499,7 +488,7 @@ export interface OutboundAccountPositionData {
         l: Balance
     }>
 }
-export interface PriceFeedMessage {
+export interface BinancePriceFeedMessage {
     e: string
     E: number
     s: string
@@ -613,4 +602,10 @@ export interface CancelAndReplaceOrderParams {
     signature?: string;
     timestamp: number;
   }
-  
+
+export interface IDataFeed {
+    getPriceFeed(symbol: string, timeframes: string[]): Observable<BinancePriceFeedMessage>;
+    // ... other methods
+}
+
+

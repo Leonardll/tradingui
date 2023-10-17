@@ -12,7 +12,7 @@ import url from "url"
 import { set } from "mongoose"
 import { generateRandomId } from "./utils/utils"
 import { OrderController } from "./controllers/OrderControllers"
-import { userDataReportWebsocket, allOrdersWebsocket, orderStatusWebsocket,exchangeInfoWebsocket,userInfoWebsocket, priceFeedWebsocket } from "./services/binanceWsService/binanceWsService"
+import { userDataReportWebsocket, allOrdersWebsocket, orderStatusWebsocket,exchangeInfoWebsocket,userInfoWebsocket, binancePriceFeedWebsocket } from "./services/binanceWsService/binanceWsService"
 import { ExchangeInfoData, ExecutionReportData } from "./types"
 // env variables
 const wsTestURL = process.env.BINANCE_TEST_WEBSOCKET_API_URL
@@ -474,7 +474,7 @@ export async function setupWebSocketServer(server: http.Server) {
                 console.error("Incorrect WebSocket URL provided")
                 wsClient.send("Incorrect Websocket URL provided")
             } else {
-                priceFeedWebsocket(wsClient, streamUrl, req, listenkey)
+                binancePriceFeedWebsocket(wsClient, streamUrl, req, listenkey)
             }
         } else if (req.url?.startsWith("/binanceUserDataReport")) {
             if (!testApiKey || !testApiSecret) {
