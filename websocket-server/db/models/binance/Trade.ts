@@ -1,5 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose"
+import dotenv from "dotenv"
 
+dotenv.config({ path: ".env.test" })
 export interface ITrade extends Document {
     exchangeId: string
     symbol: string
