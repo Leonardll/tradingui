@@ -1,12 +1,11 @@
-import { IOrder } from "../db/models/binance/Order";
-import { Observable } from "rxjs";
+import { IOrder } from "../db/models/binance/Order"
+import { Observable } from "rxjs"
 export type Asset = string
 export type EventTime = number
 export type OrderId = number
 export type ClientOrderId = string
 export type Symbolx = string
 export type Balance = number
-
 
 export interface MarketOrderParams {
     symbol: string
@@ -65,14 +64,14 @@ export interface CancelOrderParams {
     signature: string
     newClientOrderId: boolean
 }
- export interface CancelAllOrdersParams {
+export interface CancelAllOrdersParams {
     symbol: string
     timestamp: number
     recvWindow: number
     apiKey: string
     signature: string
     newClientOrderId?: boolean
- }
+}
 
 export interface CancelOCOOrderParams {
     symbol: string
@@ -273,8 +272,6 @@ export interface Data {
     result?: Order[]
 }
 
-
-
 export interface RateLimit {
     rateLimitType: string
     interval: string
@@ -336,14 +333,13 @@ export interface Data {
 }
 
 export interface GenericPriceData {
-
-    timestamp: number;
-    symbol: string;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-    volume: number;
+    timestamp: number
+    symbol: string
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
 }
 
 export interface RateLimit {
@@ -514,33 +510,28 @@ export interface BinancePriceFeedMessage {
     n: number
 }
 
-
-
-  
- export  interface CancelReplaceResponse {
-    id: string;
-    status: number;
+export interface CancelReplaceResponse {
+    id: string
+    status: number
     result?: {
-      cancelResult: string;
-      newOrderResult: string;
-      cancelResponse: any; // Define this based on your needs
-      newOrderResponse: any; // Define this based on your needs
-    };
+        cancelResult: string
+        newOrderResult: string
+        cancelResponse: any // Define this based on your needs
+        newOrderResponse: any // Define this based on your needs
+    }
     error?: {
-      code: number;
-      msg: string;
-      data: any; // Define this based on your needs
-    };
-    rateLimits: RateLimit[];
-  }
+        code: number
+        msg: string
+        data: any // Define this based on your needs
+    }
+    rateLimits: RateLimit[]
+}
 
-  export interface OCOOrderInfo {
+export interface OCOOrderInfo {
     symbol: string
     orderId: number
     clientOrderId: string
 }
-
-
 
 export interface OCOOrderResponse {
     id: string
@@ -575,37 +566,34 @@ export interface CancelOrderResponse {
     side: string
 }
 
-  
 export interface CancelAndReplaceOrderParams {
-    symbol: string;
-    cancelReplaceMode: 'STOP_ON_FAILURE' | 'ALLOW_FAILURE';
-    cancelOrderId: number;
-    cancelOrigClientOrderId?: string;
-    cancelNewClientOrderId?: string;
-    side: 'BUY' | 'SELL';
-    type: string; // You can further restrict this to the types Binance supports like 'LIMIT', 'MARKET', etc.
-    timeInForce?: string; // Similarly, you can restrict this to 'GTC', 'IOC', etc.
-    price?: string;
-    quantity?: string;
-    quoteOrderQty?: number;
-    newClientOrderId?: string;
-    newOrderRespType?: string; // 'ACK', 'RESULT', 'FULL'
-    stopPrice?: string;
-    trailingDelta?: number;
-    icebergQty?: number;
-    strategyId?: number;
-    strategyType?: number;
-    selfTradePreventionMode?: string; // You can restrict this to the types Binance supports
-    cancelRestrictions?: string; // 'ONLY_NEW', 'ONLY_PARTIALLY_FILLED', etc.
-    apiKey: string;
-    recvWindow?: number;
-    signature?: string;
-    timestamp: number;
-  }
-
-export interface IDataFeed {
-    getPriceFeed(symbol: string, timeframes: string[]): Observable<BinancePriceFeedMessage>;
-    // ... other methods
+    symbol: string
+    cancelReplaceMode: "STOP_ON_FAILURE" | "ALLOW_FAILURE"
+    cancelOrderId: number
+    cancelOrigClientOrderId?: string
+    cancelNewClientOrderId?: string
+    side: "BUY" | "SELL"
+    type: string // You can further restrict this to the types Binance supports like 'LIMIT', 'MARKET', etc.
+    timeInForce?: string // Similarly, you can restrict this to 'GTC', 'IOC', etc.
+    price?: string
+    quantity?: string
+    quoteOrderQty?: number
+    newClientOrderId?: string
+    newOrderRespType?: string // 'ACK', 'RESULT', 'FULL'
+    stopPrice?: string
+    trailingDelta?: number
+    icebergQty?: number
+    strategyId?: number
+    strategyType?: number
+    selfTradePreventionMode?: string // You can restrict this to the types Binance supports
+    cancelRestrictions?: string // 'ONLY_NEW', 'ONLY_PARTIALLY_FILLED', etc.
+    apiKey: string
+    recvWindow?: number
+    signature?: string
+    timestamp: number
 }
 
-
+export interface IDataFeed {
+    getPriceFeed(symbol: string, timeframes: string[]): Observable<BinancePriceFeedMessage>
+    // ... other methods
+}

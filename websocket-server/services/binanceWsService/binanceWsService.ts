@@ -11,11 +11,7 @@ import { IOCOOrder } from "../../db/models/binance/OCOOrders"
 import { generateDate } from "../../utils/dateUtils"
 import { generateBinanceSignature } from "../../utils/signatureUtils"
 import { ParamsType } from "../../types"
-import {
-    WebsocketManager,
-    BinanceStreamManager,
-    generateRandomId,
-} from "../../utils/utils"
+import { WebsocketManager, BinanceStreamManager, generateRandomId } from "../../utils/utils"
 import { updateExchangeInfoInDB } from "../../db/operations/binance/exchangeOps"
 import {
     OutboundAccountPositionData,
@@ -36,32 +32,26 @@ dotenv.config({ path: ".env.test" })
 
 let recvWindow = 60000
 
-
-
-
-
 export async function handleOutboundAccountPosition(data: OutboundAccountPositionData) {
-    console.log("Debug: Entered function");
+    console.log("Debug: Entered function")
     console.log("Account Position Update:", data)
 
-
     // Extract relevant information
-       // Extract relevant information
-       const eventTime = data.E;
-       const lastAccountUpdate = data.u;
-       const balances = data.B;
-   
-       console.log("Debug: balances type:", typeof balances);  // Debug log
-       console.log("Debug: balances value:", balances);  // Debug log
-   
-       // Validate the data
-       if (!Array.isArray(balances)) {
-           console.error("Invalid balance data:", balances);
-           return;
-       }
-   
-  
-    console.log("Debug: Passed validation");
+    // Extract relevant information
+    const eventTime = data.E
+    const lastAccountUpdate = data.u
+    const balances = data.B
+
+    console.log("Debug: balances type:", typeof balances) // Debug log
+    console.log("Debug: balances value:", balances) // Debug log
+
+    // Validate the data
+    if (!Array.isArray(balances)) {
+        console.error("Invalid balance data:", balances)
+        return
+    }
+
+    console.log("Debug: Passed validation")
     // Process each balance
     balances.forEach((balance: any) => {
         const asset = balance.a
@@ -581,36 +571,36 @@ export function binancePriceFeedWebsocket(
     listenkey: string,
     callback?: (data: any) => void,
 ) {
-    const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-    const symbol = parsedUrl.searchParams.get("symbol")?.toUpperCase();
-    const timeframes = parsedUrl.searchParams.get("timeframes")?.split(",") || ["1s"];
-  
-    let streamID = 1;
+    const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
+    const symbol = parsedUrl.searchParams.get("symbol")?.toUpperCase()
+    const timeframes = parsedUrl.searchParams.get("timeframes")?.split(",") || ["1s"]
+
+    let streamID = 1
     if (!symbol) {
-      console.log("No symbol provided for price feed");
-      wsClient.send("No symbol provided for price feed");
-      return;
+        console.log("No symbol provided for price feed")
+        wsClient.send("No symbol provided for price feed")
+        return
     }
-  
+
     timeframes.forEach((timeframe) => {
-      const wsPriceFeed = `${streamUrl}/${listenkey}/${symbol.toLowerCase()}@kline_${timeframe}`;
-      const binanceStreamManager = new BinanceStreamManager(wsPriceFeed);
-  
-      // Listen for kline messages
-      binanceStreamManager.on("kline", (data) => {
-        console.log(`Received price feed data for ${timeframe}:`, data);
-  
-        // Call the callback function if provided
-        if (callback) {
-          callback(data);
-        }
-  
-        if (wsClient.readyState === WebSocket.OPEN) {
-          wsClient.send(JSON.stringify(data));
-        } else {
-          console.log("wsClient is not open. Cannot send price feed data.");
-        }
-      });
+        const wsPriceFeed = `${streamUrl}/${listenkey}/${symbol.toLowerCase()}@kline_${timeframe}`
+        const binanceStreamManager = new BinanceStreamManager(wsPriceFeed)
+
+        // Listen for kline messages
+        binanceStreamManager.on("kline", (data) => {
+            console.log(`Received price feed data for ${timeframe}:`, data)
+
+            // Call the callback function if provided
+            if (callback) {
+                callback(data)
+            }
+
+            if (wsClient.readyState === WebSocket.OPEN) {
+                wsClient.send(JSON.stringify(data))
+            } else {
+                console.log("wsClient is not open. Cannot send price feed data.")
+            }
+        })
 
         // Handle errors
         binanceStreamManager.on("error", (error) => {

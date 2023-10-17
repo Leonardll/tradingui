@@ -1,9 +1,6 @@
 import { Server, WebSocket } from "ws"
 import http, { get, request } from "http"
-import {
-    cancelOrder,
-    getDataStreamListenKey,
-} from "./services/binanceService"
+import { cancelOrder, getDataStreamListenKey } from "./services/binanceService"
 import { OrderModel } from "./db/models/binance/Order"
 import { sleep } from "./utils/utils"
 import dotenv from "dotenv"
@@ -12,7 +9,14 @@ import url from "url"
 import { set } from "mongoose"
 import { generateRandomId } from "./utils/utils"
 import { OrderController } from "./controllers/OrderControllers"
-import { userDataReportWebsocket, allOrdersWebsocket, orderStatusWebsocket,exchangeInfoWebsocket,userInfoWebsocket, binancePriceFeedWebsocket } from "./services/binanceWsService/binanceWsService"
+import {
+    userDataReportWebsocket,
+    allOrdersWebsocket,
+    orderStatusWebsocket,
+    exchangeInfoWebsocket,
+    userInfoWebsocket,
+    binancePriceFeedWebsocket,
+} from "./services/binanceWsService/binanceWsService"
 import { ExchangeInfoData, ExecutionReportData } from "./types"
 // env variables
 const wsTestURL = process.env.BINANCE_TEST_WEBSOCKET_API_URL
@@ -167,24 +171,31 @@ export async function setupWebSocketServer(server: http.Server) {
                     )
                 }
             }
-        } 
+        } else if (req.url?.startsWith("/binanceCancelAndReplaceOrder")) {
+            console.log("Inside cancelAndReplaceOrder condition")
 
-        else if (req.url?.startsWith("/binanceCancelAndReplaceOrder")) {
-            console.log("Inside cancelAndReplaceOrder condition");
-        
             if (!testApiKey || !testApiSecret) {
-                console.log("No test API key or secret provided");
-                wsClient.send("No test API key or secret provided");
+                console.log("No test API key or secret provided")
+                wsClient.send("No test API key or secret provided")
             } else {
-                const parsedUrl = url.parse(req.url, true);
+                const parsedUrl = url.parse(req.url, true)
                 if (parsedUrl && parsedUrl.query) {
-                    const { symbol, cancelReplaceMode, cancelOrderId, side, type, quantity, price } = parsedUrl.query;
-        
+                    const {
+                        symbol,
+                        cancelReplaceMode,
+                        cancelOrderId,
+                        side,
+                        type,
+                        quantity,
+                        price,
+                    } = parsedUrl.query
+
                     if (
                         symbol &&
                         typeof symbol === "string" &&
                         cancelReplaceMode &&
-                        (cancelReplaceMode === "STOP_ON_FAILURE" || cancelReplaceMode === "ALLOW_FAILURE") &&
+                        (cancelReplaceMode === "STOP_ON_FAILURE" ||
+                            cancelReplaceMode === "ALLOW_FAILURE") &&
                         cancelOrderId &&
                         typeof cancelOrderId === "string" &&
                         side &&
@@ -211,22 +222,23 @@ export async function setupWebSocketServer(server: http.Server) {
                                 testApiSecret,
                             )
                             .then(() => {
-                                wsClient.send("Order successfully canceled and replaced.");
+                                wsClient.send("Order successfully canceled and replaced.")
                             })
                             .catch((err) => {
-                                wsClient.send(`Error canceling and replacing order: ${err.message}`);
-                            });
+                                wsClient.send(
+                                    `Error canceling and replacing order: ${err.message}`,
+                                )
+                            })
                     } else {
-                        console.log("Invalid request URL or missing parameters.");
-                        wsClient.send("Invalid request URL or missing parameters.");
+                        console.log("Invalid request URL or missing parameters.")
+                        wsClient.send("Invalid request URL or missing parameters.")
                     }
                 } else {
-                    console.log("Invalid request URL or missing parameters.");
-                    wsClient.send("Invalid request URL or missing parameters.");
+                    console.log("Invalid request URL or missing parameters.")
+                    wsClient.send("Invalid request URL or missing parameters.")
                 }
             }
-        }  
-        else if (req.url?.startsWith("/binanceCancelOCOOrder")) {
+        } else if (req.url?.startsWith("/binanceCancelOCOOrder")) {
             console.log("Inside cancelOCOOrder condition")
 
             if (!testApiKey || !testApiSecret) {
@@ -265,7 +277,7 @@ export async function setupWebSocketServer(server: http.Server) {
             }
         } else if (req.url?.startsWith("/binanceCancelAllOrders")) {
             console.log("Inside cancelAllOrders condition")
-  
+
             if (!testApiKey || !testApiSecret) {
                 console.log("No test API key or secret provided")
                 wsClient.send("No test API key or secret provided")
@@ -274,10 +286,7 @@ export async function setupWebSocketServer(server: http.Server) {
                 if (parsedUrl && parsedUrl.query) {
                     const { symbol } = parsedUrl.query
 
-                    if (
-                        symbol &&
-                        typeof symbol === "string" 
-                    ) {
+                    if (symbol && typeof symbol === "string") {
                         orderController
                             .handleBinanceCancelAllOrders(
                                 wsClient,

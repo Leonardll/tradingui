@@ -1,8 +1,4 @@
-import {
-    OCOOrderInfo,
-    OCOOrderResponse,
-    OCOOrderResult,
-} from "../../../types"
+import { OCOOrderInfo, OCOOrderResponse, OCOOrderResult } from "../../../types"
 import { IOCOOrder, OCOOrderModel } from "../../models/binance/OCOOrders"
 import { IOrder } from "../../models/binance/Order"
 

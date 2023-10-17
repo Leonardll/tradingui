@@ -1,6 +1,6 @@
 import axios from "axios"
 import dotenv from "dotenv"
-import { generateBinanceSignature} from "../../utils/signatureUtils"
+import { generateBinanceSignature } from "../../utils/signatureUtils"
 import { generateDate } from "../../utils/dateUtils"
 import { ParsedQs } from "qs"
 import { type } from "os"

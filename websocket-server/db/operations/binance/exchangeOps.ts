@@ -1,5 +1,5 @@
 import { ExchangeModel, IExchange, IExchangeInfo } from "../../models/binance/Exchange" // Replace 'yourModelFile' with the actual file name
-import { Symbol} from "../../../types"
+import { Symbol } from "../../../types"
 export const getSymbolFilters = async (
     exchangeName: string,
     tradingPair: string,
@@ -15,7 +15,6 @@ export const getSymbolFilters = async (
     console.log(symbolInfo)
     return symbolInfo || null
 }
-
 
 export const updateExchangeInfoInDB = async (
     userId: string,

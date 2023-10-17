@@ -8,8 +8,7 @@ import {
     cancelOCOOrderForBinance,
     cancelAllOrdersForBinance,
     cancelOrder as cancelBinanceOrder,
-    cancelAndReplaceOrderForBinance
-
+    cancelAndReplaceOrderForBinance,
 } from "../services/binanceService"
 
 let recvWindow: number = 50000
@@ -176,7 +175,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
 //             console.error(`Error cancelling all orders for ${symbol}:`, error)
 //          }
 //     }
-   
+
 //     async handleBinanceCancelAllOCOOrders() {}
 //     async handleBinanceReplaceOrder() {}
 // }
@@ -270,7 +269,6 @@ export class OrderController {
         requestId: string,
         testApiKey: string,
         testApiSecret: string,
-        
     ) {
         try {
             await executeOCOForBinance(
@@ -287,8 +285,7 @@ export class OrderController {
                 requestId,
                 recvWindow,
             )
-            console.log("Binance OCO order handled successfully");  // Add this line
-
+            console.log("Binance OCO order handled successfully") // Add this line
         } catch (error) {
             console.error("Error executing Binance OCO order:", error)
         }
@@ -316,30 +313,29 @@ export class OrderController {
             console.error("Error executing Binance limit order:", error)
         }
     }
-async handleBinanceCancelAllOrders(
-                wsClient: WebSocket,
-                symbol: string,
-                requestId: string,
-                testApiKey: string,
-                testApiSecret: string,
-            ) {
-                try {
-                    await cancelAllOrdersForBinance(
-                        wsClient,
-                        this.wsTestURL,
-                        symbol,
-                        requestId,
-                        testApiKey,
-                        testApiSecret,
-                    )
-                    console.log('Binance OCO order handled successfully');
+    async handleBinanceCancelAllOrders(
+        wsClient: WebSocket,
+        symbol: string,
+        requestId: string,
+        testApiKey: string,
+        testApiSecret: string,
+    ) {
+        try {
+            await cancelAllOrdersForBinance(
+                wsClient,
+                this.wsTestURL,
+                symbol,
+                requestId,
+                testApiKey,
+                testApiSecret,
+            )
+            console.log("Binance OCO order handled successfully")
+        } catch (error) {
+            console.error(`Error cancelling all orders for ${symbol}:`, error)
+        }
+    }
 
-                } catch (error) {
-                    console.error(`Error cancelling all orders for ${symbol}:`, error)
-                 }
-}    
-
-async handleBinanceCancelOCOOrder(
+    async handleBinanceCancelOCOOrder(
         wsClient: WebSocket,
         symbol: string,
         orderListId: number,
@@ -362,7 +358,7 @@ async handleBinanceCancelOCOOrder(
             console.error("Error executing Binance limit order:", error)
         }
     }
-async handleBinanceCancelReplaceOrder(
+    async handleBinanceCancelReplaceOrder(
         wsClient: WebSocket,
         symbol: string,
         cancelReplace: "ALLOW_FAILURE" | "STOP_ON_FAILURE",
@@ -374,25 +370,24 @@ async handleBinanceCancelReplaceOrder(
         requestId: string,
         testApiKey: string,
         testApiSecret: string,
-        
-) {
-    try {
-        await cancelAndReplaceOrderForBinance(
-            wsClient,
-            this.wsTestURL,
-            symbol,
-            cancelReplace,
-            cancelOrderId,
-            side,
-            type,
-            quantity,
-            price,
-            requestId,
-            testApiKey,
-            testApiSecret,
-        )
-    } catch (error) { 
-        console.error("Error executing Binance limit order:", error)
+    ) {
+        try {
+            await cancelAndReplaceOrderForBinance(
+                wsClient,
+                this.wsTestURL,
+                symbol,
+                cancelReplace,
+                cancelOrderId,
+                side,
+                type,
+                quantity,
+                price,
+                requestId,
+                testApiKey,
+                testApiSecret,
+            )
+        } catch (error) {
+            console.error("Error executing Binance limit order:", error)
+        }
     }
-}
 }

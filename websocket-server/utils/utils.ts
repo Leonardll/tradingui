@@ -7,14 +7,9 @@ import { EventEmitter } from "events"
 import { StreamPayload } from "./streamTypes"
 import { request } from "http"
 import { OrderModel } from "../db/models/binance/Order"
-import { ExchangeModel,IExchangeInfo } from "../db/models/binance/Exchange"
+import { ExchangeModel, IExchangeInfo } from "../db/models/binance/Exchange"
 export type StreamCallback = (data: StreamPayload) => void
-import {
-    ParamsType,
-    RateLimitInfo,
-    BinanceMessage,
-} from "../types"
-
+import { ParamsType, RateLimitInfo, BinanceMessage } from "../types"
 
 /**
  * Create a Binance API signature.
@@ -158,13 +153,13 @@ export class WebsocketManager {
             this.eventEmitter,
         )
         this.eventEmitter.on("close", this.onClose.bind(this))
-        this.eventEmitter.on("error", this.onError.bind(this))        
-        this.eventEmitter.setMaxListeners(50);
+        this.eventEmitter.on("error", this.onError.bind(this))
+        this.eventEmitter.setMaxListeners(50)
 
         // Debug: Print the number of listeners for each event
-        console.log("Number of 'message' listeners:", this.eventEmitter.listenerCount('message'));
-        console.log("Number of 'error' listeners:", this.eventEmitter.listenerCount('error'));
-        console.log("Number of 'close' listeners:", this.eventEmitter.listenerCount('close'));
+        console.log("Number of 'message' listeners:", this.eventEmitter.listenerCount("message"))
+        console.log("Number of 'error' listeners:", this.eventEmitter.listenerCount("error"))
+        console.log("Number of 'close' listeners:", this.eventEmitter.listenerCount("close"))
     }
     private setupWebSocket() {
         return new WebSocket(this.baseUrl)
@@ -373,11 +368,11 @@ export class BinanceStreamManager {
     constructor(baseEndpoint: string) {
         this.ws = new WebSocket(baseEndpoint)
         this.eventEmitter = new EventEmitter()
-        this.eventEmitter.setMaxListeners(50);
+        this.eventEmitter.setMaxListeners(50)
 
         // Debug: Print the number of listeners for each event
-        console.log("Number of 'message' listeners:", this.eventEmitter.listenerCount('message'));
-        console.log("Number of 'error' listeners:", this.eventEmitter.listenerCount('error'));
+        console.log("Number of 'message' listeners:", this.eventEmitter.listenerCount("message"))
+        console.log("Number of 'error' listeners:", this.eventEmitter.listenerCount("error"))
         this.ws.on("open", () => {
             console.log(`WebSocket stream connection established. To ${baseEndpoint}`)
             this.processSubscriptionQueue()
@@ -547,6 +542,3 @@ export class RateLimitManager {
         )
     }
 }
-
-
-
