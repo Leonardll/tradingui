@@ -250,9 +250,11 @@ export function exchangeInfoWebsocket(
         } else {
             console.log("wsClient is not open. Cannot send data.")
         }
-
+        
+        console.log("Last exchange info data:", lastExchangeInfo)
+        console.log('data result',data)
         try {
-            if (data.result.length > 0) {
+            if (Object.keys(data.result).length > 0) {
                 const newExchangeInfoData: IExchangeInfo = {
                     // Map the fields from the raw data to your IExchangeInfo interface
                     // For example:
@@ -264,12 +266,13 @@ export function exchangeInfoWebsocket(
                     sors: data.result.sors,
                     // ... add other fields
                 }
-
+                console.log("New exchange info data:", newExchangeInfoData)
+                
                 if (JSON.stringify(newExchangeInfoData) !== JSON.stringify(lastExchangeInfo)) {
                     const exchangeName = "Binance"
                     const userId = "leol" // Replace with actual user ID logic
 
-                    await updateExchangeInfoInDB(userId, exchangeName, newExchangeInfoData)
+                    await updateExchangeInfoInDB(userId, exchangeName, newExchangeInfoData).catch(err => console.error("Async error:", err));
                     console.log("Successfully updated DB.")
 
                     // Update lastExchangeInfo with newExchangeInfoData

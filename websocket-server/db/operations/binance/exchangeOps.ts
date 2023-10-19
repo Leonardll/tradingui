@@ -16,20 +16,23 @@ export const getSymbolFilters = async (
     return symbolInfo || null
 }
 
-export const updateExchangeInfoInDB = async (
+export async function updateExchangeInfoInDB(
     userId: string,
     exchangeName: string,
     exchangeInfo: IExchangeInfo,
-) => {
-    console.log("Attempting to update DB with:", userId, exchangeName, exchangeInfo)
+) {
+    console.log('Inside updateExchangeInfoInDB');
+
+    console.log("Attempting to update DB with:", userId, exchangeName, exchangeInfo);
     try {
         await ExchangeModel.findOneAndUpdate(
             { userId, exchangeName },
             { $set: { exchangeInfo } },
             { upsert: true },
-        )
-        console.log("Successfully updated DB.")
+        );
+        console.log("Successfully updated DB.");
     } catch (err) {
-        console.error("Failed to update DB:", err)
+        console.error("Failed to update DB:", err);
     }
 }
+
