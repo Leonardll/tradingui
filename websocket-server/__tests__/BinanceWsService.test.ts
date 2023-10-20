@@ -1,3 +1,11 @@
+jest.mock("../db/operations/binance/ocoOps", () => ({
+    uploadOCOToDB: jest.fn(),
+}));
+  
+  
+jest.mock('../db/models/binance/Order')
+
+
 import { RateLimit } from '../types/index';
 import WebSocket from "ws"
 import {
@@ -14,7 +22,7 @@ import {
     binancePriceFeedWebsocket,
 } from "../services/binanceWsService/binanceWsService"
 import { BalanceUpdateData, OutboundAccountPositionData, OrderResponse } from "../types"
-import { uploadOCOToDB } from "../db/operations/binance/ocoOps"
+import * as ocoOps from "../db/operations/binance/ocoOps";
 import { OrderModel } from "../db/models/binance/Order"
 
 describe("handleOutboundAccountPosition", () => {
@@ -126,14 +134,16 @@ describe("handleBalanceUpdate", () => {
     })
 })
 
-jest.mock("../db/operations/binance/ocoOps") // Replace with the actual import
+
 describe("handleOCOOrderResponse", () => {
     let consoleLogSpy: jest.SpyInstance
 
+  
     beforeEach(() => {
-        consoleLogSpy = jest.spyOn(console, "log").mockImplementation()
-        ;(uploadOCOToDB as jest.Mock).mockClear()
-    })
+        consoleLogSpy = jest.spyOn(console, "log").mockImplementation();
+        console.log("Is uploadOCOToDB a mock?", jest.isMockFunction(ocoOps.uploadOCOToDB));
+        (ocoOps.uploadOCOToDB as jest.Mock).mockClear();
+    });
 
     afterEach(() => {
         consoleLogSpy.mockRestore()
@@ -149,7 +159,7 @@ describe("handleOCOOrderResponse", () => {
 
         await handleOCOOrderResponse(mockData)
 
-        expect(uploadOCOToDB).toHaveBeenCalledWith([
+        expect(ocoOps.uploadOCOToDB).toHaveBeenCalledWith([
             {
                 ...mockData.result,
                 exchangeId: "binance",
@@ -188,7 +198,6 @@ describe("handleOCOOrderResponse", () => {
     })
 })
 
-jest.mock('../db/models/binance/Order')
 describe('handleOrderResponse', () => {
     let consoleLogSpy: jest.SpyInstance;
   
