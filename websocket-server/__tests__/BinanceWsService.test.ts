@@ -1,4 +1,4 @@
-import { RateLimit } from './../types/index';
+import { RateLimit } from '../types/index';
 import WebSocket from "ws"
 import {
     handleOutboundAccountPosition,
