@@ -1,13 +1,62 @@
+jest.mock('../utils/utils', () => {
+    return {
+      WebsocketManager: jest.fn().mockImplementation(() => {
+        return {
+          socket: null,
+          baseUrl: '',
+          reconnectDelay: 5000,
+          eventEmitter: new (require('events').EventEmitter)(),
+          requestId: '',
+          method: '',
+          params: {},
+          pingInterval: null,
+          maxReconnectAttempts: 5,
+          reconnectAttempts: 0,
+          setupWebSocket: jest.fn(),
+          connect: jest.fn(),
+          startPing: jest.fn(),
+          stopPing: jest.fn(),
+          onOpen: jest.fn(),
+          onMessage: jest.fn(),
+          forwardMessageToClient: jest.fn(),
+          onError: jest.fn(),
+          attachEventListeners: jest.fn(),
+          onClose: jest.fn(),
+          reconnect: jest.fn(),
+          readyState: jest.fn(),
+          close: jest.fn(),
+          on: jest.fn((event, callback) => {
+            console.log(`Mock 'on' method called with event: ${event}`);  
+            if (event === 'open') {
+              callback();
+            }
+          }),
+          sendMessage: jest.fn()
+        };
+      }),
+    };
+  }); 
+ 
 jest.mock("../db/operations/binance/ocoOps", () => ({
     uploadOCOToDB: jest.fn(),
 }));
-  
-  
 jest.mock('../db/models/binance/Order')
+jest.mock('../db/operations/binance/exchangeOps', () => ({
+    updateExchangeInfoInDB: jest.fn(),
+}))
+jest.mock('../db/models/binance/Exchange', () => ({
+    ExchangeModel: {
+        findOne: jest.fn(),
+    },
+}))
 
+  
 
-import { RateLimit } from '../types/index';
-import WebSocket from "ws"
+// jest.mock('../services/binanceWsService/binanceWsService', () =>({
+//     exchangeInfoWebsocket: jest.fn(),
+// }))
+// import WebSocket from  "ws"
+import {Server, WebSocket as MockWebSocket} from 'mock-socket'
 import {
     handleOutboundAccountPosition,
     handleBalanceUpdate,
@@ -23,7 +72,9 @@ import {
 } from "../services/binanceWsService/binanceWsService"
 import { BalanceUpdateData, OutboundAccountPositionData, OrderResponse } from "../types"
 import * as ocoOps from "../db/operations/binance/ocoOps";
+import * as exchangeOps from "../db/operations/binance/exchangeOps";
 import { OrderModel } from "../db/models/binance/Order"
+import { ExchangeModel } from '../db/models/binance/Exchange';
 
 describe("handleOutboundAccountPosition", () => {
     let consoleLogSpy: jest.SpyInstance
@@ -354,4 +405,68 @@ describe('handleOrderResponse', () => {
   
       expect(consoleLogSpy).toHaveBeenCalledWith("An error occurred:", mockError);
     });
+})
+
+describe("exchangeInfoWebsocket", () => {
+  let wsClient: any;  // Change the type to 'any'
+  let mockSocketServer: Server;
+
+  beforeEach(async () => {
+    try {
+      mockSocketServer = new Server("ws://localhost:8080");
+      wsClient = new MockWebSocket("ws://localhost:8080") as any;
+    } catch (error) {
+      console.error("Failed to initialize WebSocket:", error);
+      throw error;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      wsClient.onerror = reject;
+      wsClient.onopen = () => {
+        console.log("onopen event triggered"); 
+        console.log(wsClient.readyState) // Add this
+        resolve();
+      };
+    });
+    
+  }, 20000);
+
+  afterEach(() => {
+    if (wsClient && wsClient.readyState !== MockWebSocket.CLOSED) {
+      wsClient.close();
+    }
+    mockSocketServer.stop();
   });
+
+  it.only("should handle 'open' event", async () => {
+      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+      logSpy.mockClear();  // Clear any previous calls
+    
+      Object.defineProperty(wsClient, 'readyState', {
+        writable: true,
+        value: 1 // 1 means OPEN
+      });
+  
+      // Call the function under test
+      exchangeInfoWebsocket(wsClient, "ws://test.url", "requestId");
+    
+      // Manually trigger the 'connection' event on the mock server
+      mockSocketServer.emit('connection', wsClient);
+    
+      const mockEvent = new Event('open');
+      // Manually trigger the 'open' event from the mock server
+      mockSocketServer.on('connection', socket => {
+          console.log("Mock server connection triggered");  // Add this
+          socket.dispatchEvent(new Event('open'));  // Use dispatchEvent
+        });
+      
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    
+      // Check if the expected log message was captured
+      expect(logSpy).toHaveBeenCalledWith("Connection to exchange info opened");
+    
+      logSpy.mockRestore();
+    });
+});
+
+  

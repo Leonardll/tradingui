@@ -231,6 +231,8 @@ export function exchangeInfoWebsocket(
     wsTestURL: string,
     requestId: string,
 ): void {
+    console.log("exchangeInfoWebsocket function called");  // Add this
+
     const wsExchangeInfoManager = new WebsocketManager(wsTestURL, requestId, "exchangeInfo", {})
 
     wsExchangeInfoManager.on("open", () => {
