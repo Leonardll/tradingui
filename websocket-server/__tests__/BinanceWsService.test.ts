@@ -438,7 +438,7 @@ describe("exchangeInfoWebsocket", () => {
     mockSocketServer.stop();
   });
 
-  it.only("should handle 'open' event", async () => {
+  it("should handle 'open' event", async () => {
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
       logSpy.mockClear();  // Clear any previous calls
     
@@ -469,4 +469,70 @@ describe("exchangeInfoWebsocket", () => {
     });
 });
 
-  
+describe("orderStatusWebsocket", () => {
+  let wsClient: any;
+  let mockSocketServer: Server;
+
+  beforeEach(async () => {
+    try {
+      mockSocketServer = new Server("ws://localhost:8081");
+      wsClient = new MockWebSocket("ws://localhost:8081") as any;
+    } catch (error) {
+      console.error("Failed to initialize WebSocket:", error);
+      throw error;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      wsClient.onerror = reject;
+      wsClient.onopen = () => {
+        console.log("onopen event triggered");
+        console.log(wsClient.readyState);
+        resolve();
+      };
+    });
+  }, 20000);
+
+  afterEach(() => {
+    if (wsClient && wsClient.readyState !== MockWebSocket.CLOSED) {
+      wsClient.close();
+    }
+    mockSocketServer.stop();
+  });
+
+  it("should handle 'open' event for orderStatusWebsocket", async () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation();
+    logSpy.mockClear();
+
+    Object.defineProperty(wsClient, 'readyState', {
+      writable: true,
+      value: 1 // 1 means OPEN
+    });
+
+    const fakeReq = {
+      url: '/?symbol=ETH&orderId=123',
+      headers: {
+        host: 'localhost'
+      }
+    };
+
+    // Call the function under test
+    orderStatusWebsocket(wsClient, "ws://test.url", "requestId", "testApiSecret", "testApiKey", fakeReq);
+
+    // Manually trigger the 'connection' event on the mock server
+    mockSocketServer.emit('connection', wsClient);
+
+    const mockEvent = new Event('open');
+    // Manually trigger the 'open' event from the mock server
+    mockSocketServer.on('connection', socket => {
+      console.log("Mock server connection triggered");
+      socket.dispatchEvent(new Event('open'));
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Check if the expected log message was captured
+    expect(logSpy).toHaveBeenCalledWith("Connection to order status opened");
+
+    logSpy.mockRestore();
+  });
+});
