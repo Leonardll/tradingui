@@ -1,5 +1,6 @@
 import { IOrder } from "../db/models/binance/Order"
 import { Observable } from "rxjs"
+import { EventEmitter } from "events"
 export type Asset = string
 export type EventTime = number
 export type OrderId = number
@@ -597,3 +598,43 @@ export interface IDataFeed {
     getPriceFeed(symbol: string, timeframes: string[]): Observable<BinancePriceFeedMessage>
     // ... other methods
 }
+export interface ActualWebsocketManagerType {
+    socket: WebSocket | null;
+    baseUrl: string;
+    reconnectDelay: number;
+    eventEmitter: EventEmitter;
+    requestId: string;
+    method: string;
+    params: ParamsType;
+    pingInterval: NodeJS.Timeout | null;
+    maxReconnectAttempts: number;
+    reconnectAttempts: number;
+    setupWebSocket: () => WebSocket;
+    connect: (query: string, handlers: any) => void;
+    startPing: () => void;
+    stopPing: () => void;
+    onOpen: () => void;
+    onMessage: (message: string | Buffer) => void;
+    forwardMessageToClient: (wsClient: WebSocket) => void;
+    onError: (event: Event) => void;
+    attachEventListeners: (handlers: any) => void;
+    onClose: (event: CloseEvent) => void;
+    reconnect: () => void;
+    readyState: () => number | undefined;
+    close: () => void;
+    on: (event: string, listener: (...args: any[]) => void) => void;
+    sendMessage: (message: string) => void;
+  }
+  
+export interface ActualBinanceStreamManagerType {
+    ws: WebSocket;
+    subscriptions: { [key: string]: Function[] };
+    subscriptionQueue: any[];
+    eventEmitter: EventEmitter;
+    on: (event: string, listener: (...args: any[]) => void) => void;
+    processSubscriptionQueue: () => void;
+    subscribeToStream: (streamType: string, params: string[], id: number | string) => void;
+    unsubscribeFromStream: (params: string[], id: number | string) => void;
+    addListener: (stream: string, callback: Function) => void;
+    removeListener: (stream: string, callback: Function) => void;
+  }

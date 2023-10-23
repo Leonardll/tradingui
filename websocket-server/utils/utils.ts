@@ -413,7 +413,7 @@ export class BinanceStreamManager {
     }
 
     public on(event: string, listener: (...args: any[]) => void) {
-        this.eventEmitter.on(event, listener)
+                this.eventEmitter.on(event, listener)
     }
 
     private processSubscriptionQueue() {
