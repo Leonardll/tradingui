@@ -67,6 +67,7 @@ export async function userDataReportWebsocket(
     testApiKey: string,
     testApiSecret: string,
     streamUrl: string,
+    requestId: string,
 ) {
     if (!testApiKey || !testApiSecret) {
         console.error("No test API key or secret provided")

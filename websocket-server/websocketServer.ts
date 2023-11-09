@@ -10,14 +10,13 @@ import { set } from "mongoose"
 import { generateRandomId } from "./utils/utils"
 import { OrderController } from "./controllers/OrderControllers"
 import {
-    userDataReportWebsocket,
     allOrdersWebsocket,
     orderStatusWebsocket,
     exchangeInfoWebsocket,
     userInfoWebsocket,
     
 } from "./services/binanceWsService/binanceWsService"
-import { binancePriceFeedWebsocket } from "./services/binanceStreamService/binanceStreamService"
+import { binancePriceFeedWebsocket,     userDataReportWebsocket} from "./services/binanceStreamService/binanceStreamService"
 import { ExchangeInfoData, ExecutionReportData } from "./types"
 // env variables
 const wsTestURL = process.env.BINANCE_TEST_WEBSOCKET_API_URL

@@ -305,71 +305,7 @@ export function exchangeInfoWebsocket(
     })
 }
 
-// user data stream
-export async function userDataReportWebsocket(
-    wsClient: WebSocket,
-    testApiKey: string,
-    testApiSecret: string,
-    streamUrl: string,
-    requestId: string,
-) {
-   // console.log("inside userDataReportWebsocket")
-    if (!testApiKey || !testApiSecret) {
-        console.error("No test API key or secret provided")
-        wsClient.send("No test API key or secret provided")
-        return
-    }
 
-    // Generate listenKey using API (this part depends on how you've set up API calls)
-    const listenKey = await getDataStreamListenKey()
-
-    if (!listenKey) {
-        console.error("Failed to generate listenKey")
-        wsClient.send("Failed to generate listenKey")
-        return
-    }
-
-    // Create WebSocket URL for user data stream
-    const wsUserDataUrl = `${streamUrl}/${listenKey}`
-
-    // Create a new BinanceStreamManager for the user data stream
-    const binanceStreamManager = new BinanceStreamManager(wsUserDataUrl)
-
-    binanceStreamManager.on("open", () => {
-        console.log("Connection to user data report stream opened")
-    })
-
-    // Add specific listeners for different types of user data
-    binanceStreamManager.on("executionReport", (data) => {
-        console.log("Received execution report:", data)
-        handleExecutionReport(data)
-        wsClient.send(JSON.stringify(data))
-    })
-
-    binanceStreamManager.on("outboundAccountPosition", (data) => {
-        console.log("Received outbound account position:", data)
-        handleOutboundAccountPosition(data)
-        wsClient.send(JSON.stringify(data))
-    })
-
-    binanceStreamManager.on("balanceUpdate", (data) => {
-        console.log("Received balance update:", data)
-        handleBalanceUpdate(data)
-        wsClient.send(JSON.stringify(data))
-    })
-
-    // Handle errors
-    binanceStreamManager.on("error", (error: any) => {
-        console.error("User Data Websocket error:", JSON.stringify(error.message))
-        wsClient.send(JSON.stringify(error.message))
-    })
-
-    // Handle close events
-    binanceStreamManager.on("close", (code: number, reason: string) => {
-        console.log(`WebSocket connection to user data closed, code: ${code}, reason: ${reason}`)
-        wsClient.send(`WebSocket connection to user data closed, code: ${code}, reason: ${reason}`)
-    })
-}
 
 // user account info
 export async function userInfoWebsocket(

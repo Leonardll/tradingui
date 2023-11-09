@@ -80,13 +80,13 @@ import {
     handleOrderResponse,
     handleExecutionReport,
     exchangeInfoWebsocket,
-    userDataReportWebsocket,
     userInfoWebsocket,
     orderStatusWebsocket,
     allOrdersWebsocket,
     
 } from "../services/binanceWsService/binanceWsService"
-import {binancePriceFeedWebsocket} from "../services/binanceStreamService/binanceStreamService"
+import {binancePriceFeedWebsocket,     userDataReportWebsocket,
+} from "../services/binanceStreamService/binanceStreamService"
 import { BalanceUpdateData, OutboundAccountPositionData, OrderResponse } from "../types"
 import * as ocoOps from "../db/operations/binance/ocoOps";
 import { OrderModel } from "../db/models/binance/Order"
