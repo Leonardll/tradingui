@@ -15,8 +15,9 @@ import {
     orderStatusWebsocket,
     exchangeInfoWebsocket,
     userInfoWebsocket,
-    binancePriceFeedWebsocket,
+    
 } from "./services/binanceWsService/binanceWsService"
+import { binancePriceFeedWebsocket } from "./services/binanceStreamService/binanceStreamService"
 import { ExchangeInfoData, ExecutionReportData } from "./types"
 // env variables
 const wsTestURL = process.env.BINANCE_TEST_WEBSOCKET_API_URL

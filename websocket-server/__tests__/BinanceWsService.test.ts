@@ -52,7 +52,12 @@ jest.mock('../utils/utils', () => {
     }),
   };
 });
-
+jest.mock('axios');
+jest.mock('../services/binanceService', () => {
+  return {
+    getDataStreamListenKey: jest.fn().mockResolvedValue('mockListenKey'),
+  };
+});
   
 jest.mock("../db/operations/binance/ocoOps", () => ({
     uploadOCOToDB: jest.fn(),
@@ -79,12 +84,15 @@ import {
     userInfoWebsocket,
     orderStatusWebsocket,
     allOrdersWebsocket,
-    binancePriceFeedWebsocket,
+    
 } from "../services/binanceWsService/binanceWsService"
+import {binancePriceFeedWebsocket} from "../services/binanceStreamService/binanceStreamService"
 import { BalanceUpdateData, OutboundAccountPositionData, OrderResponse } from "../types"
 import * as ocoOps from "../db/operations/binance/ocoOps";
 import { OrderModel } from "../db/models/binance/Order"
 import { BinanceStreamManager } from '../utils/utils';
+import { getDataStreamListenKey } from '../services/binanceService';
+import axios from 'axios';
 describe("handleOutboundAccountPosition", () => {
     let consoleLogSpy: jest.SpyInstance
     let consoleErrorSpy: jest.SpyInstance
@@ -613,139 +621,165 @@ describe("allOrdersWebsocket", () => {
   });
 });
 
-describe("userInfoWebsocket", () => {
-  let wsClient: any;
-  let mockSocketServer: Server;
+describe("binancePriceFeedWebsocket", () => {
+  let wsClient:any;
+  let mockBinanceStreamServer: Server;
+  const fakeURL = "ws://localhost:8085";
+
+  beforeAll(() => {
+    global.WebSocket = require('mock-socket'); // Ensures WebSocket is available in the test environment
+    mockBinanceStreamServer = new Server(fakeURL);
+  });
 
   beforeEach(async () => {
-    try {
-      mockSocketServer = new Server("ws://localhost:8083");
-      wsClient = new MockWebSocket("ws://localhost:8083") as any;
-    } catch (error) {
-      console.error("Failed to initialize WebSocket:", error);
-      throw error;
-    }
+    jest.clearAllMocks();
+    
+    mockBinanceStreamServer.on('connection', socket => {
+      const klineData = {
+        e: "kline",
+        E: 123456789,
+        s: "BTCUSDT",
+        k: {
+          t: 123400000,
+          T: 123460000,
+          s: "BTCUSDT",
+          i: "1m",
+          f: 100,
+          L: 200,
+          o: "5000.00000000",
+          c: "5200.00000000",
+          h: "5300.00000000",
+          l: "4999.99999999",
+          v: "75.00000000",
+          n: 100,
+          x: false,
+          q: "392500.00000000",
+          V: "37.50000000",
+          Q: "196250.00000000",
+          B: "123456.78900000"
+        }
+      }; 
 
+      ['1m', '3m', '5m'].forEach((tf, index) => {
+        setTimeout(() => {
+          klineData.k.i = tf;
+          socket.send(JSON.stringify(klineData));
+          console.log(`Mock Server: Sent price feed data for ${tf}`);
+        }, 100 * (index + 1));
+      });
+    });
+
+    wsClient = new WebSocket(fakeURL);
     await new Promise<void>((resolve, reject) => {
-      wsClient.onerror = reject;
       wsClient.onopen = () => {
-        console.log("onopen event triggered");
-        console.log(wsClient.readyState);
+        console.log('Mock Client: WebSocket Connected');
         resolve();
       };
+      wsClient.onerror = (event:any) => {
+        console.error('Mock Client: WebSocket encountered an error', event);
+        reject(event);
+      };
     });
-  }, 20000);
+  });
 
   afterEach(() => {
-    if (wsClient && wsClient.readyState !== MockWebSocket.CLOSED) {
+    if (wsClient && wsClient.readyState !== WebSocket.CLOSED) {
       wsClient.close();
     }
-    mockSocketServer.stop();
+    //mockBinanceStreamServer.close();
   });
-
-  it("should handle 'open' event for userInfoWebsocket", async () => {
+  afterAll(() => {
+    mockBinanceStreamServer.close();
+  });
+  it("should handle kline data from the mock server", async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation();
-    logSpy.mockClear();
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-    Object.defineProperty(wsClient, 'readyState', {
-      writable: true,
-      value: 1 // 1 means OPEN
-    });
+    wsClient.onmessage = (event:any) => {
+      const data = JSON.parse(event.data) as any;
+      console.log(`Test: Received price feed data for ${data.k.i}`);
+    };
 
-    // Call the function under test
-    userInfoWebsocket(wsClient, "ws://test.url", "testApiKey", "testApiSecret", "requestId");
+    await new Promise(resolve => setTimeout(resolve, 350)); // Ensures all messages are received
 
-    // Manually trigger the 'connection' event on the mock server
-    mockSocketServer.emit('connection', wsClient);
-
-    const mockEvent = new Event('open');
-    // Manually trigger the 'open' event from the mock server
-    mockSocketServer.on('connection', socket => {
-      console.log("Mock server connection triggered");
-      socket.dispatchEvent(new Event('open'));
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Check if the expected log message was captured
-    expect(logSpy).toHaveBeenCalledWith("Connection to user info opened");
-
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Mock Server: Sent price feed data for 1m'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Mock Server: Sent price feed data for 3m'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Mock Server: Sent price feed data for 5m'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Test: Received price feed data for 1m'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Test: Received price feed data for 3m'));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Test: Received price feed data for 5m'));
+  
+    expect(errorSpy).not.toHaveBeenCalled();
+  
     logSpy.mockRestore();
+    errorSpy.mockRestore();
   });
-});
-describe("binancePriceFeedWebsocket", () => {
+ 
+
+  });
+
+
+describe("userDataReportWebsocket", () => {
   let wsClient: any;
   let mockBinanceStreamServer: Server;
 
   
   beforeEach(async () => {
     jest.setTimeout(60000); // Increase timeout to 60 seconds
+    jest.clearAllMocks(); // Clear all mocks before each test
 
     try {
-      wsClient = new MockWebSocket("ws://localhost:8085") as any;
-      mockBinanceStreamServer = new Server("ws://localhost:8085");
+      wsClient = new MockWebSocket("ws://localhost:8086") as any;
+      mockBinanceStreamServer = new Server("ws://localhost:8086");
 
       mockBinanceStreamServer.on('connection', () => {
         console.log("Mock server is running and accepted a connection");
       });
 
-      wsClient.onerror = (error: any) => {
-        console.error("WebSocket Error Details: ", JSON.stringify(error, null, 2));
-        // Don't throw, just log the error
-      };
-
       await new Promise<void>((resolve, reject) => {
-        wsClient.onerror = reject;
+        wsClient.onerror = (error:any) => {
+          console.error("WebSocket Error Details: ", JSON.stringify(error, null, 2));
+          reject(error);
+        };
         wsClient.onopen = () => {
-          console.log("WebSocket instance:", wsClient);
-          console.log("WebSocket readyState:", wsClient.readyState);
           resolve();
         };
       });
     } catch (error) {
       console.error("Failed to initialize WebSocket:", error);
-      // Don't throw, just log the error
     }
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
     if (wsClient && wsClient.readyState !== MockWebSocket.CLOSED) {
       wsClient.close();
     }
     mockBinanceStreamServer.stop();
   });
 
-  it.only("should handle kline data for binancePriceFeedWebsocket", async () => {
+  it("should handle user data for userDataReportWebsocket", async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation();
     logSpy.mockClear();
 
-    Object.defineProperty(wsClient, 'readyState', {
-      writable: true,
-      value: 1 // 1 means OPEN
-    });
+    const testApiKey = 'testApiKey';
+    const testApiSecret = 'testApiSecret';
+    const streamUrl = 'wss://test.url';
+    const requestId = 'requestId';
 
-    const req = {
-      url: '/?symbol=BTCUSDT&timeframes=1m',
-      headers: {
-        host: 'localhost'
-      }
-    };
-
-    binancePriceFeedWebsocket(wsClient, "wss://test.url", req, "listenkey");
+    userDataReportWebsocket(wsClient, testApiKey, testApiSecret, streamUrl, requestId);
 
     // Delay the mock event emission to ensure WebSocket is open
-    setTimeout(() => {
-      mockBinanceStreamServer.emit('kline', { some: 'data' });
-    }, 2000);
-    console.debug("All calls to logSpy:", logSpy.mock.calls);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    mockBinanceStreamServer.emit('executionReport', { some: 'data' });
 
-    await new Promise((resolve) => setTimeout(resolve, 4000)); // Wait for 4 seconds
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for 4 seconds
+
     if (logSpy.mock.calls.length > 0) {
-      expect(logSpy).toHaveBeenCalledWith("Received price feed data for 1m:", { some: 'data' });
+      expect(logSpy).toHaveBeenCalledWith("Received execution report:", { some: 'data' });
     } else {
       console.error("logSpy was not called");
     }
+
     logSpy.mockRestore();
   });
 });

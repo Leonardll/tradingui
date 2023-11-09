@@ -313,7 +313,7 @@ export async function userDataReportWebsocket(
     streamUrl: string,
     requestId: string,
 ) {
-    console.log("inside userDataReportWebsocket")
+   // console.log("inside userDataReportWebsocket")
     if (!testApiKey || !testApiSecret) {
         console.error("No test API key or secret provided")
         wsClient.send("No test API key or secret provided")
@@ -568,63 +568,3 @@ export function allOrdersWebsocket(
 
 // Trades info
 
-// market data stream
-export function binancePriceFeedWebsocket(
-    wsClient: WebSocket,
-    streamUrl: string,
-    req: any,
-    listenkey: string,
-    callback?: (data: any) => void,
-) {
-    const parsedUrl = new URL(req.url, `http://${req.headers.host}`)
-    const symbol = parsedUrl.searchParams.get("symbol")?.toUpperCase()
-    const timeframes = parsedUrl.searchParams.get("timeframes")?.split(",") || ["1s"]
-
-    let streamID = 1
-    if (!symbol) {
-        console.log("No symbol provided for price feed")
-        wsClient.send("No symbol provided for price feed")
-        return
-    }
-
-    timeframes.forEach((timeframe) => {
-        const wsPriceFeed = `${streamUrl}/${listenkey}/${symbol.toLowerCase()}@kline_${timeframe}`
-        const binanceStreamManager = new BinanceStreamManager(wsPriceFeed)
-
-        // Listen for kline messages
-        binanceStreamManager.on("kline", (data) => {
-            console.log(`Received price feed data for ${timeframe}:`, data)
-
-            // Call the callback function if provided
-            if (callback) {
-                callback(data)
-            }
-
-            if (wsClient.readyState === WebSocket.OPEN) {
-                wsClient.send(JSON.stringify(data))
-            } else {
-                console.log("wsClient is not open. Cannot send price feed data.")
-            }
-        })
-
-        // Handle errors
-        binanceStreamManager.on("error", (error) => {
-            console.error("An error occurred:", error)
-        })
-
-        // Handle close events
-        binanceStreamManager.on("close", (code: number, reason: string) => {
-            console.log(
-                `WebSocket connection to price feed closed, code: ${code}, reason: ${reason}`,
-            )
-        })
-
-        // Subscribe to the kline stream for the given symbol and timeframe
-        binanceStreamManager.subscribeToStream(
-            "kline",
-            [`${symbol.toLowerCase()}@kline_${timeframe}`],
-            streamID,
-        )
-        streamID++
-    })
-}

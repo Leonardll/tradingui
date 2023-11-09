@@ -1,7 +1,7 @@
 import WebSocket from "ws"
 import { Observable } from "rxjs"
 import { IDataFeed, BinancePriceFeedMessage } from "../types"
-import { binancePriceFeedWebsocket } from "../services/binanceWsService/binanceWsService"
+import { binancePriceFeedWebsocket } from "../services/binanceStreamService/binanceStreamService"
 import dotenv from "dotenv"
 
 dotenv.config({ path: ".env.test" })
