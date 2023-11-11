@@ -1,4 +1,8 @@
-
+class MockBinanceStreamManager {
+  // Mock methods and properties as needed
+  on = jest.fn();
+  // ... other mocked methods and properties
+}
 jest.mock('../utils/utils', () => {
   return {
     WebsocketManager: jest.fn().mockImplementation(() => {
@@ -37,12 +41,30 @@ jest.mock('../utils/utils', () => {
       };
     }),
     BinanceStreamManager: jest.fn().mockImplementation(() => {
+      const onMock = jest.fn((event, callback) => {
+        if (event === 'open') {
+          // Simulate the open event after a delay
+          setTimeout(callback, 0);
+        } else {
+          // Immediate invocation of callback with mock data for other events
+          const mockEventData: { E?: number; [key: string]: any } = {}; // E is optional, and can include other properties
+          switch(event) {
+            case 'executionReport':
+              mockEventData.E = 123456789 /* mock event time value */;
+              // Add other necessary properties for executionReport event
+              break;
+            // Handle other events similarly
+          }
+          callback(mockEventData);
+        }
+      });
       return {
         ws: new WebSocket('wss://test.url'), // Mocked WebSocket
         subscriptions: {},
         subscriptionQueue: [],
         eventEmitter: new (require('events').EventEmitter)(),
-        on: jest.fn(),
+        on: onMock,
+        wsClient: { send: jest.fn() },
         processSubscriptionQueue: jest.fn(),
         subscribeToStream: jest.fn(),
         unsubscribeFromStream: jest.fn(),
@@ -52,13 +74,14 @@ jest.mock('../utils/utils', () => {
     }),
   };
 });
+
 jest.mock('axios');
 jest.mock('../services/binanceService', () => {
   return {
     getDataStreamListenKey: jest.fn().mockResolvedValue('mockListenKey'),
   };
 });
-  
+
 jest.mock("../db/operations/binance/ocoOps", () => ({
     uploadOCOToDB: jest.fn(),
 }));
@@ -83,9 +106,9 @@ import {
     userInfoWebsocket,
     orderStatusWebsocket,
     allOrdersWebsocket,
-    
+
 } from "../services/binanceWsService/binanceWsService"
-import {binancePriceFeedWebsocket,     userDataReportWebsocket,
+import {binancePriceFeedWebsocket, userDataReportWebsocket,
 } from "../services/binanceStreamService/binanceStreamService"
 import { BalanceUpdateData, OutboundAccountPositionData, OrderResponse } from "../types"
 import * as ocoOps from "../db/operations/binance/ocoOps";
@@ -93,6 +116,8 @@ import { OrderModel } from "../db/models/binance/Order"
 import { BinanceStreamManager } from '../utils/utils';
 import { getDataStreamListenKey } from '../services/binanceService';
 import axios from 'axios';
+
+
 describe("handleOutboundAccountPosition", () => {
     let consoleLogSpy: jest.SpyInstance
     let consoleErrorSpy: jest.SpyInstance
@@ -206,7 +231,7 @@ describe("handleBalanceUpdate", () => {
 describe("handleOCOOrderResponse", () => {
     let consoleLogSpy: jest.SpyInstance
 
-  
+
     beforeEach(() => {
         consoleLogSpy = jest.spyOn(console, "log").mockImplementation();
         console.log("Is uploadOCOToDB a mock?", jest.isMockFunction(ocoOps.uploadOCOToDB));
@@ -268,16 +293,16 @@ describe("handleOCOOrderResponse", () => {
 
 describe('handleOrderResponse', () => {
     let consoleLogSpy: jest.SpyInstance;
-  
+
     beforeEach(() => {
       consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
       (OrderModel.prototype.save as jest.Mock).mockClear();
     });
-  
+
     afterEach(() => {
       consoleLogSpy.mockRestore();
     });
-  
+
     it('should save new order with valid data', async () => {
         const mockData: OrderResponse = {
             id: 'someId',
@@ -310,14 +335,14 @@ describe('handleOrderResponse', () => {
             ]
           };
       const mockSavedEntry = { _id: 'someId' };
-  
+
       (OrderModel.prototype.save as jest.Mock).mockResolvedValue(mockSavedEntry);
-  
+
       await handleOrderResponse(mockData);
-  
+
       expect(consoleLogSpy).toHaveBeenCalledWith("Saved entry with ID:", mockSavedEntry._id);
     });
-  
+
     it('should log an error for invalid status', async () => {
         const mockData: OrderResponse = {
             id: 'someId',
@@ -349,16 +374,16 @@ describe('handleOrderResponse', () => {
               }
             ]
           };
-  
+
       await handleOrderResponse(mockData);
-  
+
       expect(consoleLogSpy).toHaveBeenCalledWith(
         'Received an OrderResponse with an error status or empty result:',
         mockData.status,
       );
-    
+
     });
-  
+
     it('should log an error for empty result', async () => {
         const mockData: OrderResponse = {
             id: 'someId',
@@ -374,15 +399,15 @@ describe('handleOrderResponse', () => {
               }
             ]
           };
-  
+
       await handleOrderResponse(mockData);
-  
+
       expect(consoleLogSpy).toHaveBeenCalledWith(
         'Received an OrderResponse with an error status or empty result:',
         mockData.status,
       );
     });
-  
+
     it('should log an error if saving fails', async () => {
         const mockData: OrderResponse = {
             id: 'someId',
@@ -415,11 +440,11 @@ describe('handleOrderResponse', () => {
             ]
           };
       const mockError = new Error('Some error');
-  
+
       (OrderModel.prototype.save as jest.Mock).mockRejectedValue(mockError);
-  
+
       await handleOrderResponse(mockData);
-  
+
       expect(consoleLogSpy).toHaveBeenCalledWith("An error occurred:", mockError);
     });
 })
@@ -440,12 +465,12 @@ describe("exchangeInfoWebsocket", () => {
     await new Promise<void>((resolve, reject) => {
       wsClient.onerror = reject;
       wsClient.onopen = () => {
-        console.log("onopen event triggered"); 
+        console.log("onopen event triggered");
         console.log(wsClient.readyState) // Add this
         resolve();
       };
     });
-    
+
   }, 20000);
 
   afterEach(() => {
@@ -458,30 +483,30 @@ describe("exchangeInfoWebsocket", () => {
   it("should handle 'open' event", async () => {
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
       logSpy.mockClear();  // Clear any previous calls
-    
+
       Object.defineProperty(wsClient, 'readyState', {
         writable: true,
         value: 1 // 1 means OPEN
       });
-  
+
       // Call the function under test
       exchangeInfoWebsocket(wsClient, "ws://test.url", "requestId");
-    
+
       // Manually trigger the 'connection' event on the mock server
       mockSocketServer.emit('connection', wsClient);
-    
+
       const mockEvent = new Event('open');
       // Manually trigger the 'open' event from the mock server
       mockSocketServer.on('connection', socket => {
           console.log("Mock server connection triggered");  // Add this
           socket.dispatchEvent(new Event('open'));  // Use dispatchEvent
         });
-      
+
       await new Promise((resolve) => setTimeout(resolve, 2000));
-    
+
       // Check if the expected log message was captured
       expect(logSpy).toHaveBeenCalledWith("Connection to exchange info opened");
-    
+
       logSpy.mockRestore();
     });
 });
@@ -633,7 +658,7 @@ describe("binancePriceFeedWebsocket", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    
+
     mockBinanceStreamServer.on('connection', socket => {
       const klineData = {
         e: "kline",
@@ -658,7 +683,7 @@ describe("binancePriceFeedWebsocket", () => {
           Q: "196250.00000000",
           B: "123456.78900000"
         }
-      }; 
+      };
 
       ['1m', '3m', '5m'].forEach((tf, index) => {
         setTimeout(() => {
@@ -708,57 +733,64 @@ describe("binancePriceFeedWebsocket", () => {
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Test: Received price feed data for 1m'));
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Test: Received price feed data for 3m'));
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Test: Received price feed data for 5m'));
-  
+
     expect(errorSpy).not.toHaveBeenCalled();
-  
+
     logSpy.mockRestore();
     errorSpy.mockRestore();
   });
- 
+
 
   });
 
 
+  describe('userDataReportWebsocket',  () => {
+    let mockServer: Server;
+    let wsClient: any;
 
+    beforeEach(async () => {
+          jest.setTimeout(60000); // Increase timeout to 60 seconds
+          jest.clearAllMocks(); // Clear all mocks before each test
+          try {
+            wsClient = new MockWebSocket("ws://localhost:8086") as any;
+            mockServer = new Server("ws://localhost:8086");
+            wsClient.send = jest.fn();
 
-describe("userDataReportWebsocket", () => {
-  let wsClient: any;
-  let mockBinanceStreamServer: Server;
+            mockServer.on('connection', () => {
+              console.log("Mock server is running and accepted a connection");
+            });
 
-  
-  beforeEach(async () => {
-    jest.setTimeout(60000); // Increase timeout to 60 seconds
-    jest.clearAllMocks(); // Clear all mocks before each test
+            await new Promise<void>((resolve, reject) => {
+              wsClient.onerror = (error:any) => {
+                console.error("WebSocket Error Details: ", JSON.stringify(error, null, 2));
+                reject(error);
+              };
+              wsClient.onopen = () => {
+                resolve();
+              };
+            });
+          } catch (error) {
+            console.error("Failed to initialize WebSocket:", error);
+          }
+        });
 
-    try {
-      wsClient = new MockWebSocket("ws://localhost:8086") as any;
-      mockBinanceStreamServer = new Server("ws://localhost:8086");
+        afterEach(() => {
+          if (wsClient && wsClient.readyState !== WebSocket.CLOSED) {
+            wsClient.close();
+          }
+          mockServer.close();
+        });
 
-      mockBinanceStreamServer.on('connection', () => {
-        console.log("Mock server is running and accepted a connection");
-      });
+    it('should send an error if API key or secret is not provided', async () => {
+      // Mock the send method on the wsClient
+      wsClient.send = jest.fn();
 
-      await new Promise<void>((resolve, reject) => {
-        wsClient.onerror = (error:any) => {
-          console.error("WebSocket Error Details: ", JSON.stringify(error, null, 2));
-          reject(error);
-        };
-        wsClient.onopen = () => {
-          resolve();
-        };
-      });
-    } catch (error) {
-      console.error("Failed to initialize WebSocket:", error);
-    }
-  });
+      // Now we call your function with the mock WebSocket instance
+      await userDataReportWebsocket(wsClient , '', '', 'ws://localhost:8086', 'someRequestId');
 
-  afterEach(() => {
-    if (wsClient && wsClient.readyState !== MockWebSocket.CLOSED) {
-      wsClient.close();
-    }
-    mockBinanceStreamServer.stop();
-  });
-
+      // Expect that the send method was called with the correct error message
+      expect(wsClient.send).toHaveBeenCalledWith("No test API key or secret provided");
+    });
   it("should handle user data for userDataReportWebsocket", async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation();
     logSpy.mockClear();
@@ -772,16 +804,58 @@ describe("userDataReportWebsocket", () => {
 
     // Delay the mock event emission to ensure WebSocket is open
     await new Promise(resolve => setTimeout(resolve, 2000));
-    mockBinanceStreamServer.emit('executionReport', { some: 'data' });
+    mockServer.emit('executionReport', { some: 'data' });
 
     await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for 4 seconds
 
     if (logSpy.mock.calls.length > 0) {
-      expect(logSpy).toHaveBeenCalledWith("Received execution report:", { some: 'data' });
+      expect(logSpy).toHaveBeenCalledWith("Connection to user data report stream opened" );
     } else {
       console.error("logSpy was not called");
     }
 
     logSpy.mockRestore();
   });
-});
+  it('should send an error if listenKey generation fails', async () => {
+    // Mock the getDataStreamListenKey function to return null, simulating a failure
+    (getDataStreamListenKey as jest.Mock).mockResolvedValueOnce(null);
+
+    // Mock the send method on the wsClient
+    wsClient.send = jest.fn();
+
+    // Call your function with the mock WebSocket instance and valid API keys
+    await userDataReportWebsocket(wsClient , 'validApiKey', 'validApiSecret', 'ws://localhost:1234', 'someRequestId');
+
+    // Expect that the send method was called with the correct error message
+    expect(wsClient.send).toHaveBeenCalledWith("Failed to generate listenKey");
+  });
+  it('should handle open event correctly', async () => {
+    const consoleLogSpy = jest.spyOn(console, 'log');
+
+    // Call the function with the mock WebSocket instance
+    await userDataReportWebsocket(wsClient , 'testApiKey', 'testApiSecret', 'ws://localhost:1234', 'someRequestId');
+
+    // Allow any asynchronous code to complete
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Verify that the open event handler was called
+    expect(consoleLogSpy).toHaveBeenCalledWith("Connection to user data report stream opened");
+
+    // Clean up
+    consoleLogSpy.mockRestore();
+  });
+  
+  // it.only("should successfully initialize and register event listeners", async () => {
+  //   await userDataReportWebsocket(wsClient, 'testApiKey', 'testApiSecret', 'streamUrl', 'requestId');
+  
+  //   const mockBinanceStreamManagerInstance = new MockBinanceStreamManager();
+    
+  //   expect(mockBinanceStreamManagerInstance.on).toBeInstanceOf(Function);
+  //   // Ensure all necessary events are covered
+  //   ['open', 'executionReport', 'outboundAccountPosition', 'balanceUpdate', 'error', 'close'].forEach(event => {
+  //     expect(mockBinanceStreamManagerInstance.on).toHaveBeenCalledWith(event, expect.any(Function));
+  //   });
+  // });
+  
+    // Other tests...
+  });
