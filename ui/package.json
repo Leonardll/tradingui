@@ -12,6 +12,7 @@
   "dependencies": {
     "@auth0/nextjs-auth0": "^3.0.0-beta.3",
     "@binance/connector": "^3.0.0-rc.2",
+    "@headlessui/react": "^1.7.17",
     "@total-typescript/ts-reset": "^0.4.2",
     "@types/lru-cache": "^7.10.10",
     "@types/node": "^20.4.5",
@@ -29,6 +30,7 @@
     "eslint": "8.40.0",
     "eslint-config-next": "13.4.1",
     "express-rate-limit": "^6.8.0",
+    "lightweight-charts": "^4.1.1",
     "micro": "^10.0.1",
     "mongoose": "^7.4.1",
     "next": "13.4.1",
